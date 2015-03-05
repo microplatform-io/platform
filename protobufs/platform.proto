@@ -1,0 +1,60 @@
+package platform;
+
+message Request {
+    optional int32 method       = 3;
+    optional int32 resource     = 2;
+    optional bytes body         = 1;
+}
+
+message RoutedMessage {
+    optional string id          = 1;
+    optional int32 method       = 2;
+    optional int32 resource     = 3;
+    optional string reply_topic = 4;
+    optional bytes body         = 5;
+}
+
+message ConsumeEvent {
+    optional string description             = 1;
+    optional Event event                    = 2;
+    repeated Event responses                = 3;
+    repeated PossibleError possible_errors  = 4;
+    optional bool is_deprecated             = 5;
+    optional string version                 = 6;
+}
+
+message Documentation {
+    optional string description             = 1;
+    repeated ConsumeEvent consume_events    = 2;
+}
+
+message DocumentationList {
+    repeated Documentation documentations   = 1;
+}
+
+message Error {
+    optional string message     = 1;
+}
+
+message Event {
+    optional string organization    = 4;
+    optional string method          = 1;
+    optional string resource        = 2;
+    optional string payload         = 3;
+}
+
+enum Method {
+    REPLY       = 14;
+    GET         = 15;
+}
+
+message PossibleError {
+    optional string error               = 1; // api.boost.co/docs/constants#CREDENTIAL_INSTANCE_Error.INVALID_IDENTIFIER
+    optional string description         = 2; // When an identifier is invalid
+}
+
+enum Resource {
+    DOCUMENTATION           = 65533;
+    DOCUMENTATION_LIST      = 65534;
+    ERROR                   = 65535;
+}
