@@ -92,8 +92,8 @@ func (ac *AmqpConsumer) ListenAndServe() error {
 		return err
 	}
 
-	for msg := range msgs {
-		go func(msg amqp.Delivery) {
+	for {
+		for msg := range msgs {
 			if ac.topic == "" || (ac.topic == msg.RoutingKey) {
 				routedMessage := &RoutedMessage{}
 				if err := proto.Unmarshal(msg.Body, routedMessage); err != nil {
@@ -112,14 +112,9 @@ func (ac *AmqpConsumer) ListenAndServe() error {
 					}
 				}
 			} else {
-				// If this message has already been redelivered, just ack it
-				if msg.Redelivered {
-					msg.Ack(true)
-				} else {
-					msg.Reject(true)
-				}
+				msg.Reject(true)
 			}
-		}(msg)
+		}
 	}
 
 	return nil

@@ -4,7 +4,6 @@ import (
 	"crypto/sha1"
 	"fmt"
 	"os"
-	"sync"
 )
 
 var (
@@ -88,19 +87,19 @@ func (s *Service) AddTopicHandler(topic string, handler Handler) {
 }
 
 func (s *Service) Run() {
-	wg := &sync.WaitGroup{}
-	wg.Add(len(s.consumers))
+	quit := make(chan struct{}, len(s.consumers))
 
 	for i := range s.consumers {
 		go func(i int) {
 			logger.Printf("Serving consumer: %#v", s.consumers[i])
-			logger.Println("Consumer has stopped:", s.consumers[i].ListenAndServe())
-			wg.Done()
+			logger.Printf("Consumer has stopped: %#v : %s", s.consumers[i], s.consumers[i].ListenAndServe())
+
+			quit <- struct{}{}
 		}(i)
 	}
 
 	logger.Println("Serving all topics")
-	wg.Wait()
+	<-quit
 	logger.Println("Consumers have stopped")
 }
 
