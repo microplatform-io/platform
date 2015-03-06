@@ -94,26 +94,28 @@ func (ac *AmqpConsumer) ListenAndServe() error {
 
 	for {
 		for msg := range msgs {
-			if ac.topic == "" || (ac.topic == msg.RoutingKey) {
-				routedMessage := &RoutedMessage{}
-				if err := proto.Unmarshal(msg.Body, routedMessage); err != nil {
-					logger.Println("> failed to decode routed message")
-					msg.Ack(true)
-				} else {
-					if err := ac.handler.HandleMessage(routedMessage); err != nil {
-						// If this message has already been redelivered, just ack it
-						if msg.Redelivered {
-							msg.Ack(true)
-						} else {
-							msg.Reject(true)
-						}
-					} else {
+			go func(msg amqp.Delivery) {
+				if ac.topic == "" || (ac.topic == msg.RoutingKey) {
+					routedMessage := &RoutedMessage{}
+					if err := proto.Unmarshal(msg.Body, routedMessage); err != nil {
+						logger.Println("> failed to decode routed message")
 						msg.Ack(true)
+					} else {
+						if err := ac.handler.HandleMessage(routedMessage); err != nil {
+							// If this message has already been redelivered, just ack it
+							if msg.Redelivered {
+								msg.Ack(true)
+							} else {
+								msg.Reject(true)
+							}
+						} else {
+							msg.Ack(true)
+						}
 					}
+				} else {
+					msg.Reject(true)
 				}
-			} else {
-				msg.Reject(true)
-			}
+			}(msg)
 		}
 	}
 
