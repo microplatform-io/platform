@@ -51,10 +51,10 @@ type AmqpConsumer struct {
 	queue    string
 	topic    string
 	exchange string
-	handler  ConsumerMessageHandler
+	handler  ConsumerHandler
 }
 
-func (ac *AmqpConsumer) AddHandler(handler ConsumerMessageHandler) {
+func (ac *AmqpConsumer) AddHandler(handler ConsumerHandler) {
 	ac.handler = handler
 }
 
@@ -129,7 +129,7 @@ type AmqpConsumerFactory struct {
 	queue string
 }
 
-func (acf *AmqpConsumerFactory) Create(topic string, handler ConsumerMessageHandler) Consumer {
+func (acf *AmqpConsumerFactory) Create(topic string, handler ConsumerHandler) Consumer {
 	consumer, err := NewAmqpTopicConsumer(acf.conn, acf.queue, topic, "amq.topic")
 	if err != nil {
 		logger.Fatalf("> failed to create a consumer from the factory: %s", err)

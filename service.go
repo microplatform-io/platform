@@ -64,6 +64,10 @@ func (s *Service) AddHandler(method, resource interface{}, handler Handler) {
 	s.AddTopicHandler(fmt.Sprintf("%d_%d", method, resource), handler)
 }
 
+func (s *Service) AddListener(topic string, handler ConsumerHandler) {
+	s.consumers = append(s.consumers, s.consumerFactory.Create(topic, handler))
+}
+
 func (s *Service) AddTopicHandler(topic string, handler Handler) {
 	logger.Println("> adding topic handler", topic)
 

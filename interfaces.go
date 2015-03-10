@@ -6,15 +6,15 @@ import (
 
 type Consumer interface {
 	io.Closer
-	AddHandler(ConsumerMessageHandler)
+	AddHandler(ConsumerHandler)
 	ListenAndServe() error
 }
 
 type ConsumerFactory interface {
-	Create(topic string, handler ConsumerMessageHandler) Consumer
+	Create(topic string, handler ConsumerHandler) Consumer
 }
 
-type ConsumerMessageHandler interface {
+type ConsumerHandler interface {
 	HandleMessage([]byte) error
 }
 
