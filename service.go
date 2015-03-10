@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"code.google.com/p/goprotobuf/proto"
 	"crypto/sha1"
 	"fmt"
 	"os"
@@ -66,8 +67,15 @@ func (s *Service) AddHandler(method, resource interface{}, handler Handler) {
 func (s *Service) AddTopicHandler(topic string, handler Handler) {
 	logger.Println("> adding topic handler", topic)
 
-	s.consumers = append(s.consumers, s.consumerFactory.Create(topic, RoutedMessageHandlerFunc(func(request *RoutedMessage) error {
+	s.consumers = append(s.consumers, s.consumerFactory.Create(topic, ConsumerHandlerFunc(func(p []byte) error {
 		logger.Printf("> handling %s request", topic)
+
+		request := &RoutedMessage{}
+		if err := proto.Unmarshal(p, request); err != nil {
+			logger.Println("> failed to decode routed message")
+
+			return nil
+		}
 
 		response, err := handler.HandleRoutedMessage(request)
 		if err != nil {

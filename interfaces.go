@@ -6,22 +6,22 @@ import (
 
 type Consumer interface {
 	io.Closer
-	AddHandler(RoutedMessageHandler)
+	AddHandler(ConsumerMessageHandler)
 	ListenAndServe() error
 }
 
 type ConsumerFactory interface {
-	Create(topic string, handler RoutedMessageHandler) Consumer
+	Create(topic string, handler ConsumerMessageHandler) Consumer
 }
 
-type RoutedMessageHandler interface {
-	HandleMessage(*RoutedMessage) error
+type ConsumerMessageHandler interface {
+	HandleMessage([]byte) error
 }
 
-type RoutedMessageHandlerFunc func(*RoutedMessage) error
+type ConsumerHandlerFunc func([]byte) error
 
-func (handlerFunc RoutedMessageHandlerFunc) HandleMessage(cloudMessage *RoutedMessage) error {
-	return handlerFunc(cloudMessage)
+func (handlerFunc ConsumerHandlerFunc) HandleMessage(p []byte) error {
+	return handlerFunc(p)
 }
 
 type Publisher interface {

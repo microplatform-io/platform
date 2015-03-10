@@ -71,12 +71,19 @@ func NewStandardRouter(publisher Publisher, consumerFactory ConsumerFactory) Rou
 	go func() {
 		for i := 0; i <= 100; i++ {
 			logger.Println("> creating a new consumer...")
-			consumer := consumerFactory.Create(router.topic, RoutedMessageHandlerFunc(func(msg *RoutedMessage) error {
-				logger.Printf("> receiving message for router: %s", msg)
+			consumer := consumerFactory.Create(router.topic, ConsumerHandlerFunc(func(p []byte) error {
+				logger.Println("> receiving message for router")
+
+				routedMessage := &RoutedMessage{}
+				if err := Unmarshal(p, routedMessage); err != nil {
+					return nil
+				}
+
+				logger.Printf("> receiving message for router: %s", routedMessage)
 
 				router.mu.Lock()
-				if replyChan, exists := router.pendingRequests[msg.GetId()]; exists {
-					replyChan <- msg
+				if replyChan, exists := router.pendingRequests[routedMessage.GetId()]; exists {
+					replyChan <- routedMessage
 				}
 				router.mu.Unlock()
 
