@@ -49,8 +49,8 @@ enum Method {
 }
 
 message PossibleError {
-    optional string error               = 1; // api.boost.co/docs/constants#CREDENTIAL_INSTANCE_Error.INVALID_IDENTIFIER
-    optional string description         = 2; // When an identifier is invalid
+    optional int32 code          = 1;
+    optional string explanation  = 2; 
 }
 
 enum Resource {

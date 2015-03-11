@@ -329,8 +329,8 @@ func (m *Event) GetPayload() string {
 }
 
 type PossibleError struct {
-	Error            *string `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
-	Description      *string `protobuf:"bytes,2,opt,name=description" json:"description,omitempty"`
+	Code             *int32  `protobuf:"varint,1,opt,name=code" json:"code,omitempty"`
+	Explanation      *string `protobuf:"bytes,2,opt,name=explanation" json:"explanation,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -338,16 +338,16 @@ func (m *PossibleError) Reset()         { *m = PossibleError{} }
 func (m *PossibleError) String() string { return proto.CompactTextString(m) }
 func (*PossibleError) ProtoMessage()    {}
 
-func (m *PossibleError) GetError() string {
-	if m != nil && m.Error != nil {
-		return *m.Error
+func (m *PossibleError) GetCode() int32 {
+	if m != nil && m.Code != nil {
+		return *m.Code
 	}
-	return ""
+	return 0
 }
 
-func (m *PossibleError) GetDescription() string {
-	if m != nil && m.Description != nil {
-		return *m.Description
+func (m *PossibleError) GetExplanation() string {
+	if m != nil && m.Explanation != nil {
+		return *m.Explanation
 	}
 	return ""
 }
