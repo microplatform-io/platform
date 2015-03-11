@@ -8,56 +8,15 @@ import (
 )
 
 var (
-	rabbitUser   = os.Getenv("RABBITMQ_USER")
-	rabbitPass   = os.Getenv("RABBITMQ_PASS")
-	rabbitAddr   = os.Getenv("RABBITMQ_PORT_5672_TCP_ADDR")
-	rabbitPort   = os.Getenv("RABBITMQ_PORT_5672_TCP_PORT")
-	rabbitString = fmt.Sprintf("amqp://%s:%s@%s:%s/", rabbitUser, rabbitPass, rabbitAddr, rabbitPort)
-
+	logger       = GetLogger("platform")
 	serviceToken = os.Getenv("SERVICE_TOKEN")
 )
 
-func GetDefaultPublisher() Publisher {
-	conn, err := NewAmqpConnection(rabbitString)
-	if err != nil {
-		logger.Fatalf("Failed to connect to AMQP: %s\n", err)
-	}
-
-	producer, err := NewAmqpProducer(conn, "amq.topic")
-	if err != nil {
-		logger.Fatalf("Failed to connect to producer: %s\n", err)
-	}
-
-	return producer
-}
-
-func GetDefaultConsumerFactory(queue string) ConsumerFactory {
-	conn, err := NewAmqpConnection(rabbitString)
-	if err != nil {
-		logger.Fatalf("Failed to connect to AMQP: %s\n", err)
-	}
-
-	return &AmqpConsumerFactory{
-		conn:  conn,
-		queue: queue,
-	}
-}
-
-type Handler interface {
-	HandleRoutedMessage(*RoutedMessage) (*RoutedMessage, error)
-}
-
-type HandlerFunc func(*RoutedMessage) (*RoutedMessage, error)
-
-func (handlerFunc HandlerFunc) HandleRoutedMessage(cloudMessage *RoutedMessage) (*RoutedMessage, error) {
-	return handlerFunc(cloudMessage)
-}
-
 type Service struct {
-	publisher       Publisher
-	consumerFactory ConsumerFactory
+	publisher  Publisher
+	subscriber Subscriber
 
-	consumers []Consumer
+	subscriptions []Subscription
 }
 
 func (s *Service) AddHandler(method, resource interface{}, handler Handler) {
@@ -65,13 +24,18 @@ func (s *Service) AddHandler(method, resource interface{}, handler Handler) {
 }
 
 func (s *Service) AddListener(topic string, handler ConsumerHandler) {
-	s.consumers = append(s.consumers, s.consumerFactory.Create(topic, handler))
+	subscription, err := s.subscriber.Subscribe(topic, handler)
+	if err != nil {
+		logger.Fatalf("Failed to create to subscriber: %s\n", err)
+	}
+
+	s.subscriptions = append(s.subscriptions, subscription)
 }
 
 func (s *Service) AddTopicHandler(topic string, handler Handler) {
 	logger.Println("> adding topic handler", topic)
 
-	s.consumers = append(s.consumers, s.consumerFactory.Create(topic, ConsumerHandlerFunc(func(p []byte) error {
+	subscription, err := s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(p []byte) error {
 		logger.Printf("> handling %s request", topic)
 
 		request := &RoutedMessage{}
@@ -95,16 +59,21 @@ func (s *Service) AddTopicHandler(topic string, handler Handler) {
 		}
 
 		return s.publisher.Publish(request.GetReplyTopic(), payload)
-	})))
+	}))
+	if err != nil {
+		logger.Fatalf("> failed to create a handler: %s", err)
+	}
+
+	s.subscriptions = append(s.subscriptions, subscription)
 }
 
 func (s *Service) Run() {
-	quit := make(chan struct{}, len(s.consumers))
+	quit := make(chan struct{}, len(s.subscriptions))
 
-	for i := range s.consumers {
+	for i := range s.subscriptions {
 		go func(i int) {
-			logger.Printf("Serving consumer: %#v", s.consumers[i])
-			logger.Printf("Consumer has stopped: %#v : %s", s.consumers[i], s.consumers[i].ListenAndServe())
+			logger.Printf("Running subscription: %#v", s.subscriptions[i])
+			logger.Printf("Subscription has stopped: %#v : %s", s.subscriptions[i], s.subscriptions[i].Run())
 
 			quit <- struct{}{}
 		}(i)
@@ -112,13 +81,13 @@ func (s *Service) Run() {
 
 	logger.Println("Serving all topics")
 	<-quit
-	logger.Println("Consumers have stopped")
+	logger.Println("Subscriptions have stopped")
 }
 
-func NewService(publisher Publisher, consumerFactory ConsumerFactory) (*Service, error) {
+func NewService(publisher Publisher, subscriber Subscriber) (*Service, error) {
 	return &Service{
-		publisher:       publisher,
-		consumerFactory: consumerFactory,
+		publisher:  publisher,
+		subscriber: subscriber,
 	}, nil
 }
 

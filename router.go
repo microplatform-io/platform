@@ -12,8 +12,8 @@ type Router interface {
 }
 
 type StandardRouter struct {
-	publisher       Publisher
-	consumerFactory ConsumerFactory
+	publisher  Publisher
+	subscriber Subscriber
 
 	topic string
 
@@ -56,42 +56,44 @@ func (sr *StandardRouter) Route(msg *RoutedMessage, timeout time.Duration) (*Rou
 	return response, err
 }
 
-func NewStandardRouter(publisher Publisher, consumerFactory ConsumerFactory) Router {
+func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 	logger.Printf("> creating a new standard router.")
 	logger.Printf("> publisher: %#v", publisher)
-	logger.Printf("> consumerFactory: %#v", consumerFactory)
+	logger.Printf("> subscriber: %#v", subscriber)
 
 	router := &StandardRouter{
 		publisher:       publisher,
-		consumerFactory: consumerFactory,
+		subscriber:      subscriber,
 		topic:           "router_" + CreateUUID(),
 		pendingRequests: map[string]chan *RoutedMessage{},
 	}
 
+	subscription, err := subscriber.Subscribe(router.topic, ConsumerHandlerFunc(func(body []byte) error {
+		logger.Println("> receiving message for router")
+
+		routedMessage := &RoutedMessage{}
+		if err := Unmarshal(body, routedMessage); err != nil {
+			return nil
+		}
+
+		logger.Printf("> receiving message for router: %s", routedMessage)
+
+		router.mu.Lock()
+		if replyChan, exists := router.pendingRequests[routedMessage.GetId()]; exists {
+			replyChan <- routedMessage
+		}
+		router.mu.Unlock()
+
+		return nil
+	}))
+	if err != nil {
+		logger.Fatalf("> failed to create a subscription: %s", err)
+	}
+
 	go func() {
 		for i := 0; i <= 100; i++ {
-			logger.Println("> creating a new consumer...")
-			consumer := consumerFactory.Create(router.topic, ConsumerHandlerFunc(func(p []byte) error {
-				logger.Println("> receiving message for router")
-
-				routedMessage := &RoutedMessage{}
-				if err := Unmarshal(p, routedMessage); err != nil {
-					return nil
-				}
-
-				logger.Printf("> receiving message for router: %s", routedMessage)
-
-				router.mu.Lock()
-				if replyChan, exists := router.pendingRequests[routedMessage.GetId()]; exists {
-					replyChan <- routedMessage
-				}
-				router.mu.Unlock()
-
-				return nil
-			}))
-
-			logger.Println("> consumer created: %#v", consumer)
-			consumer.ListenAndServe()
+			logger.Println("> running subscription...")
+			subscription.Run()
 
 			time.Sleep(time.Duration(i%5) * time.Second)
 		}

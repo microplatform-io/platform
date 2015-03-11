@@ -2,90 +2,41 @@ package platform
 
 import (
 	"github.com/streadway/amqp"
+	"net"
 )
 
-var logger = GetLogger("platform")
-
-func NewAmqpConnection(endpoint string) (*amqp.Connection, error) {
-	logger.Println("[amqp] > connecting")
-
-	return amqp.Dial(endpoint)
+// The amqp subscription acts as an isolated unit of code that can
+// run the range over messages that the amqp channel has to offer.
+type AmqpSubscription struct {
+	queue   string
+	topic   string
+	handler ConsumerHandler
+	ch      *amqp.Channel
 }
 
-type AmqpProducer struct {
-	conn     *amqp.Connection
-	exchange string
-}
+// Range over the channel's messages after declaring the queue and binding
+// it to the exchange and topic. This function blocks permanently, so consider
+// invoking it inside of a goroutine
+func (s *AmqpSubscription) Run() error {
+	defer s.ch.Close()
 
-func (ap *AmqpProducer) Close() error {
-	return ap.conn.Close()
-}
-
-func (ap *AmqpProducer) Publish(topic string, body []byte) error {
-	logger.Printf("[amqp] > publishing for %s", topic)
-
-	ch, err := ap.conn.Channel()
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
-
-	return ch.Publish(
-		ap.exchange, // exchange
-		topic,       // routing key
-		false,       // mandatory
-		false,       // immediate
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        body,
-		},
-	)
-}
-
-func NewAmqpProducer(conn *amqp.Connection, exchange string) (*AmqpProducer, error) {
-	return &AmqpProducer{conn, exchange}, nil
-}
-
-type AmqpConsumer struct {
-	conn     *amqp.Connection
-	queue    string
-	topic    string
-	exchange string
-	handler  ConsumerHandler
-}
-
-func (ac *AmqpConsumer) AddHandler(handler ConsumerHandler) {
-	ac.handler = handler
-}
-
-func (ac *AmqpConsumer) Close() error {
-	return ac.conn.Close()
-}
-
-func (ac *AmqpConsumer) ListenAndServe() error {
-	ch, err := ac.conn.Channel()
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
-
-	queue, err := ch.QueueDeclare(ac.queue, false, true, false, false, nil)
+	_, err := s.ch.QueueDeclare(s.queue, false, true, false, false, nil)
 	if err != nil {
 		return err
 	}
 
-	if err := ch.QueueBind(queue.Name, ac.topic, ac.exchange, false, nil); err != nil {
+	if err := s.ch.QueueBind(s.queue, s.topic, "amq.topic", false, nil); err != nil {
 		return err
 	}
 
-	msgs, err := ch.Consume(
-		queue.Name, // queue
-		ac.topic,   // consumer
-		false,      // auto-ack
-		false,      // exclusive
-		false,      // no-local
-		false,      // no-wait
-		nil,        // args
+	msgs, err := s.ch.Consume(
+		s.queue, // queue
+		s.topic, // consumer
+		false,   // auto-ack
+		false,   // exclusive
+		false,   // no-local
+		false,   // no-wait
+		nil,     // args
 	)
 	if err != nil {
 		return err
@@ -94,9 +45,9 @@ func (ac *AmqpConsumer) ListenAndServe() error {
 	for {
 		for msg := range msgs {
 			go func(msg amqp.Delivery) {
-				if ac.topic == "" || (ac.topic == msg.RoutingKey) {
-					if err := ac.handler.HandleMessage(msg.Body); err != nil {
-						// If this message has already been redelivered, just ack it
+				if s.topic == "" || (s.topic == msg.RoutingKey) {
+					if err := s.handler.HandleMessage(msg.Body); err != nil {
+						// If this message has already been redelivered once, just ack it to discard it
 						if msg.Redelivered {
 							msg.Ack(true)
 						} else {
@@ -115,27 +66,127 @@ func (ac *AmqpConsumer) ListenAndServe() error {
 	return nil
 }
 
-func NewAmqpTopicConsumer(conn *amqp.Connection, queue, topic, exchange string) (*AmqpConsumer, error) {
-	return &AmqpConsumer{
-		conn:     conn,
-		queue:    queue,
-		topic:    topic,
-		exchange: exchange,
+type AmqpPublisher struct {
+	connMgr *AmqpConnectionManager
+}
+
+func (p *AmqpPublisher) Publish(topic string, body []byte) error {
+	logger.Printf("[amqp] > publishing for %s", topic)
+
+	conn, err := p.connMgr.GetConnection()
+	if err != nil {
+		return err
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+
+	return ch.Publish(
+		"amq.topic", // exchange
+		topic,       // routing key
+		false,       // mandatory
+		false,       // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        body,
+		},
+	)
+}
+
+func NewAmqpPublisher(connMgr *AmqpConnectionManager) (*AmqpPublisher, error) {
+	_, err := connMgr.GetConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	return &AmqpPublisher{connMgr: connMgr}, nil
+}
+
+type AmqpSubscriber struct {
+	connMgr *AmqpConnectionManager
+	queue   string
+}
+
+func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) (Subscription, error) {
+	conn, err := s.connMgr.GetConnection()
+	if err != nil {
+		return nil, err
+	}
+
+	ch, err := conn.Channel()
+	if err != nil {
+		return nil, err
+	}
+
+	return &AmqpSubscription{
+		queue:   s.queue,
+		topic:   topic,
+		ch:      ch,
+		handler: handler,
 	}, nil
 }
 
-type AmqpConsumerFactory struct {
-	conn  *amqp.Connection
-	queue string
-}
-
-func (acf *AmqpConsumerFactory) Create(topic string, handler ConsumerHandler) Consumer {
-	consumer, err := NewAmqpTopicConsumer(acf.conn, acf.queue, topic, "amq.topic")
+func NewAmqpSubscriber(connMgr *AmqpConnectionManager, queue string) (*AmqpSubscriber, error) {
+	_, err := connMgr.GetConnection()
 	if err != nil {
-		logger.Fatalf("> failed to create a consumer from the factory: %s", err)
+		return nil, err
 	}
 
-	consumer.AddHandler(handler)
+	return &AmqpSubscriber{
+		connMgr: connMgr,
+		queue:   queue,
+	}, nil
+}
 
-	return consumer
+// The amqp connection manager handles the persistence of a single connection to be
+// reused across multiple clients. If a connection needs to be reset, we will add
+// a helper function that resets the connection so that the subsequent connection
+// lookup will obtain a new connection.
+type AmqpConnectionManager struct {
+	user        string
+	pass        string
+	host        string
+	port        string
+	virtualHost string
+
+	conn *amqp.Connection
+}
+
+// Return the existing connection if one has already been established, or
+// else we should generate a new connection and cache it for reuse.
+func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
+	if cm.conn != nil {
+		return cm.conn, nil
+	}
+
+	conn, err := amqp.Dial("amqp://" + cm.user + ":" + cm.pass + "@" + cm.host + ":" + cm.port + "/" + cm.virtualHost)
+	if err != nil {
+		return nil, err
+	}
+
+	cm.conn = conn
+
+	return cm.conn, nil
+}
+
+// Generate a new connection manager with all of the credentials needed to establish
+// an AMQP connection. Addr comes in the form of host:port, if no port is provided
+// then the standard port 5672 will be used
+func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnectionManager {
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil {
+		host = addr
+		port = "5672"
+	}
+
+	return &AmqpConnectionManager{
+		user:        user,
+		pass:        pass,
+		host:        host,
+		port:        port,
+		virtualHost: virtualHost,
+	}
 }
