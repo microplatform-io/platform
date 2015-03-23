@@ -1,8 +1,11 @@
 package platform
 
 import (
+	"errors"
+	"fmt"
 	"github.com/streadway/amqp"
 	"net"
+	"sync"
 )
 
 // The amqp subscription acts as an isolated unit of code that can
@@ -12,6 +15,27 @@ type AmqpSubscription struct {
 	topic   string
 	handler ConsumerHandler
 	ch      *amqp.Channel
+}
+
+type MultiAmqpSubscription struct {
+	amqpSubscriptions []*AmqpSubscription
+}
+
+func (s *MultiAmqpSubscription) Run() error {
+	var wg sync.WaitGroup
+
+	wg.Add(len(s.amqpSubscriptions))
+
+	for i := range s.amqpSubscriptions {
+		// How ugly is this?  Instead of passing wait group into run
+		go func(i int) {
+			s.amqpSubscriptions[i].Run()
+			wg.Done()
+		}(i)
+	}
+
+	wg.Wait()
+	return nil
 }
 
 // Range over the channel's messages after declaring the queue and binding
@@ -103,6 +127,11 @@ func NewAmqpPublisher(connMgr *AmqpConnectionManager) (*AmqpPublisher, error) {
 	return &AmqpPublisher{connMgr: connMgr}, nil
 }
 
+type MultiAmqpSubscriber struct {
+	connMgrs []*AmqpConnectionManager
+	queue    string
+}
+
 type AmqpSubscriber struct {
 	connMgr *AmqpConnectionManager
 	queue   string
@@ -124,6 +153,69 @@ func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) (Subsc
 		topic:   topic,
 		ch:      ch,
 		handler: handler,
+	}, nil
+}
+
+func (s *MultiAmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) (Subscription, error) {
+	amqpSubscriptions := []*AmqpSubscription{}
+
+	for _, connMgr := range s.connMgrs {
+		fmt.Println("Multi-subscribe ", connMgr.host)
+		conn, err := connMgr.GetConnection()
+		if err != nil {
+			//return nil, err
+			fmt.Println(err)
+			continue
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			//return nil, err
+			fmt.Println(err)
+			continue
+		}
+
+		fmt.Println(s.queue, topic, ch)
+		amqpSubscriptions = append(amqpSubscriptions, &AmqpSubscription{
+			queue:   s.queue,
+			topic:   topic,
+			ch:      ch,
+			handler: handler,
+		})
+	}
+
+	if len(amqpSubscriptions) == 0 {
+		return nil, errors.New("Could not create a single subscription.")
+	}
+
+	return &MultiAmqpSubscription{
+		amqpSubscriptions: amqpSubscriptions,
+	}, nil
+}
+
+func NewMultiAmqpSubscriber(connMgrs []*AmqpConnectionManager, queue string) (*MultiAmqpSubscriber, error) {
+
+	mgrs := []*AmqpConnectionManager{}
+
+	for _, connMgr := range connMgrs {
+		fmt.Println("NewMultiAmqpSub", connMgr.host)
+		_, err := NewAmqpSubscriber(connMgr, queue)
+		if err != nil {
+			fmt.Println(err)
+			//Issue connecting to this rabbitmq.
+			continue
+		}
+
+		mgrs = append(mgrs, connMgr)
+	}
+
+	if len(mgrs) == 0 {
+		return nil, errors.New("Could not create a single subscriber.")
+	}
+
+	return &MultiAmqpSubscriber{
+		connMgrs: mgrs,
+		queue:    queue,
 	}, nil
 }
 
