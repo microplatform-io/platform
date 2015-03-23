@@ -44,22 +44,20 @@ func (s *AmqpSubscription) Run() error {
 
 	for {
 		for msg := range msgs {
-			go func(msg amqp.Delivery) {
-				if s.topic == "" || (s.topic == msg.RoutingKey) {
-					if err := s.handler.HandleMessage(msg.Body); err != nil {
-						// If this message has already been redelivered once, just ack it to discard it
-						if msg.Redelivered {
-							msg.Ack(true)
-						} else {
-							msg.Reject(true)
-						}
-					} else {
+			if s.topic == "" || (s.topic == msg.RoutingKey) {
+				if err := s.handler.HandleMessage(msg.Body); err != nil {
+					// If this message has already been redelivered once, just ack it to discard it
+					if msg.Redelivered {
 						msg.Ack(true)
+					} else {
+						msg.Reject(true)
 					}
 				} else {
-					msg.Reject(true)
+					msg.Ack(true)
 				}
-			}(msg)
+			} else {
+				msg.Reject(true)
+			}
 		}
 	}
 
