@@ -49,8 +49,8 @@ enum Method {
 }
 
 message PossibleError {
-    optional int32 code          = 1;
-    optional string explanation  = 2; 
+    optional string error        = 1;
+    optional string description  = 2;
 }
 
 enum Resource {
