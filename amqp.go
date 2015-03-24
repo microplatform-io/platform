@@ -4,8 +4,10 @@ import (
 	"errors"
 	"fmt"
 	"github.com/streadway/amqp"
+	"math/rand"
 	"net"
 	"sync"
+	"time"
 )
 
 // The amqp subscription acts as an isolated unit of code that can
@@ -27,7 +29,6 @@ func (s *MultiAmqpSubscription) Run() error {
 	wg.Add(len(s.amqpSubscriptions))
 
 	for i := range s.amqpSubscriptions {
-		// How ugly is this?  Instead of passing wait group into run
 		go func(i int) {
 			s.amqpSubscriptions[i].Run()
 			wg.Done()
@@ -92,6 +93,11 @@ type AmqpPublisher struct {
 	connMgr *AmqpConnectionManager
 }
 
+type MultiAmqpPublisher struct {
+	connMgrs   []*AmqpConnectionManager
+	connMgrPtr int
+}
+
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 	logger.Printf("[amqp] > publishing for %s", topic)
 
@@ -118,6 +124,35 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 	)
 }
 
+func (p *MultiAmqpPublisher) Publish(topic string, body []byte) error {
+	fmt.Printf("[amqp] > publishing for %s", topic)
+
+	conn, err := p.connMgrs[p.connMgrPtr].GetConnection()
+	if err != nil {
+		return err
+	}
+	fmt.Printf("[amqp] > publishing on %+v", p.connMgrs[p.connMgrPtr])
+
+	ch, err := conn.Channel()
+	if err != nil {
+		return err
+	}
+	defer ch.Close()
+	p.connMgrPtr = (p.connMgrPtr + 1) % len(p.connMgrs)
+
+	return ch.Publish(
+		"amq.topic", // exchange
+		topic,       // routing key
+		false,       // mandatory
+		false,       // immediate
+		amqp.Publishing{
+			ContentType: "text/plain",
+			Body:        body,
+		},
+	)
+
+}
+
 func NewAmqpPublisher(connMgr *AmqpConnectionManager) (*AmqpPublisher, error) {
 	_, err := connMgr.GetConnection()
 	if err != nil {
@@ -125,6 +160,34 @@ func NewAmqpPublisher(connMgr *AmqpConnectionManager) (*AmqpPublisher, error) {
 	}
 
 	return &AmqpPublisher{connMgr: connMgr}, nil
+}
+
+func NewMultiAmqpPublisher(connMgrs []*AmqpConnectionManager) (*MultiAmqpPublisher, error) {
+	mgrs := []*AmqpConnectionManager{}
+
+	for _, connMgr := range connMgrs {
+		_, err := connMgr.GetConnection()
+		if err != nil {
+			//
+			continue
+		}
+
+		mgrs = append(mgrs, connMgr)
+	}
+
+	if len(mgrs) == 0 {
+		return nil, errors.New("Could not make a single connection to publish")
+	}
+
+	// randomly assign the ptr to one of the connected mgrs instead of starting
+	// them all at 0
+	rand.Seed(time.Now().UTC().UnixNano())
+
+	return &MultiAmqpPublisher{
+		connMgrs:   mgrs,
+		connMgrPtr: rand.Intn(len(mgrs)),
+	}, nil
+
 }
 
 type MultiAmqpSubscriber struct {
@@ -160,22 +223,18 @@ func (s *MultiAmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) (
 	amqpSubscriptions := []*AmqpSubscription{}
 
 	for _, connMgr := range s.connMgrs {
-		fmt.Println("Multi-subscribe ", connMgr.host)
 		conn, err := connMgr.GetConnection()
 		if err != nil {
 			//return nil, err
-			fmt.Println(err)
 			continue
 		}
 
 		ch, err := conn.Channel()
 		if err != nil {
 			//return nil, err
-			fmt.Println(err)
 			continue
 		}
 
-		fmt.Println(s.queue, topic, ch)
 		amqpSubscriptions = append(amqpSubscriptions, &AmqpSubscription{
 			queue:   s.queue,
 			topic:   topic,
@@ -198,10 +257,8 @@ func NewMultiAmqpSubscriber(connMgrs []*AmqpConnectionManager, queue string) (*M
 	mgrs := []*AmqpConnectionManager{}
 
 	for _, connMgr := range connMgrs {
-		fmt.Println("NewMultiAmqpSub", connMgr.host)
 		_, err := NewAmqpSubscriber(connMgr, queue)
 		if err != nil {
-			fmt.Println(err)
 			//Issue connecting to this rabbitmq.
 			continue
 		}
