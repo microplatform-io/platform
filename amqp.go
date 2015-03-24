@@ -2,7 +2,6 @@ package platform
 
 import (
 	"errors"
-	"fmt"
 	"github.com/streadway/amqp"
 	"math/rand"
 	"net"
@@ -19,18 +18,18 @@ type AmqpSubscription struct {
 	ch      *amqp.Channel
 }
 
-type MultiAmqpSubscription struct {
-	amqpSubscriptions []*AmqpSubscription
+type MultiSubscription struct {
+	subscriptions []Subscription
 }
 
-func (s *MultiAmqpSubscription) Run() error {
+func (s *MultiSubscription) Run() error {
 	var wg sync.WaitGroup
 
-	wg.Add(len(s.amqpSubscriptions))
+	wg.Add(len(s.subscriptions))
 
-	for i := range s.amqpSubscriptions {
+	for i := range s.subscriptions {
 		go func(i int) {
-			s.amqpSubscriptions[i].Run()
+			s.subscriptions[i].Run()
 			wg.Done()
 		}(i)
 	}
@@ -93,9 +92,9 @@ type AmqpPublisher struct {
 	connMgr *AmqpConnectionManager
 }
 
-type MultiAmqpPublisher struct {
-	connMgrs   []*AmqpConnectionManager
-	connMgrPtr int
+type MultiPublisher struct {
+	publishers    []Publisher
+	nextPublisher int
 }
 
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
@@ -124,33 +123,14 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 	)
 }
 
-func (p *MultiAmqpPublisher) Publish(topic string, body []byte) error {
-	fmt.Printf("[amqp] > publishing for %s", topic)
-
-	conn, err := p.connMgrs[p.connMgrPtr].GetConnection()
+func (p *MultiPublisher) Publish(topic string, body []byte) error {
+	err := p.publishers[p.nextPublisher].Publish(topic, body)
 	if err != nil {
 		return err
 	}
-	fmt.Printf("[amqp] > publishing on %+v", p.connMgrs[p.connMgrPtr])
 
-	ch, err := conn.Channel()
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
-	p.connMgrPtr = (p.connMgrPtr + 1) % len(p.connMgrs)
-
-	return ch.Publish(
-		"amq.topic", // exchange
-		topic,       // routing key
-		false,       // mandatory
-		false,       // immediate
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        body,
-		},
-	)
-
+	p.nextPublisher = (p.nextPublisher + 1) % len(p.publishers)
+	return nil
 }
 
 func NewAmqpPublisher(connMgr *AmqpConnectionManager) (*AmqpPublisher, error) {
@@ -162,37 +142,21 @@ func NewAmqpPublisher(connMgr *AmqpConnectionManager) (*AmqpPublisher, error) {
 	return &AmqpPublisher{connMgr: connMgr}, nil
 }
 
-func NewMultiAmqpPublisher(connMgrs []*AmqpConnectionManager) (*MultiAmqpPublisher, error) {
-	mgrs := []*AmqpConnectionManager{}
+func NewMultiPublisher(publishers ...Publisher) Publisher {
+	p := make([]Publisher, len(publishers))
+	copy(p, publishers)
 
-	for _, connMgr := range connMgrs {
-		_, err := connMgr.GetConnection()
-		if err != nil {
-			//
-			continue
-		}
-
-		mgrs = append(mgrs, connMgr)
-	}
-
-	if len(mgrs) == 0 {
-		return nil, errors.New("Could not make a single connection to publish")
-	}
-
-	// randomly assign the ptr to one of the connected mgrs instead of starting
-	// them all at 0
 	rand.Seed(time.Now().UTC().UnixNano())
+	ptr := rand.Intn(len(publishers))
 
-	return &MultiAmqpPublisher{
-		connMgrs:   mgrs,
-		connMgrPtr: rand.Intn(len(mgrs)),
-	}, nil
-
+	return &MultiPublisher{
+		publishers:    p,
+		nextPublisher: ptr,
+	}
 }
 
-type MultiAmqpSubscriber struct {
-	connMgrs []*AmqpConnectionManager
-	queue    string
+type MultiSubscriber struct {
+	subscribers []Subscriber
 }
 
 type AmqpSubscriber struct {
@@ -219,61 +183,32 @@ func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) (Subsc
 	}, nil
 }
 
-func (s *MultiAmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) (Subscription, error) {
-	amqpSubscriptions := []*AmqpSubscription{}
+func (s *MultiSubscriber) Subscribe(topic string, handler ConsumerHandler) (Subscription, error) {
+	subscriptions := []Subscription{}
 
-	for _, connMgr := range s.connMgrs {
-		conn, err := connMgr.GetConnection()
+	for _, subscriber := range s.subscribers {
+		sub, err := subscriber.Subscribe(topic, handler)
 		if err != nil {
-			//return nil, err
 			continue
 		}
 
-		ch, err := conn.Channel()
-		if err != nil {
-			//return nil, err
-			continue
-		}
-
-		amqpSubscriptions = append(amqpSubscriptions, &AmqpSubscription{
-			queue:   s.queue,
-			topic:   topic,
-			ch:      ch,
-			handler: handler,
-		})
+		subscriptions = append(subscriptions, sub)
 	}
 
-	if len(amqpSubscriptions) == 0 {
-		return nil, errors.New("Could not create a single subscription.")
+	if len(subscriptions) == 0 {
+		return nil, errors.New("Could not create one or more subsciptions")
 	}
 
-	return &MultiAmqpSubscription{
-		amqpSubscriptions: amqpSubscriptions,
+	return &MultiSubscription{
+		subscriptions: subscriptions,
 	}, nil
 }
 
-func NewMultiAmqpSubscriber(connMgrs []*AmqpConnectionManager, queue string) (*MultiAmqpSubscriber, error) {
+func NewMultiSubscriber(subscribers ...Subscriber) Subscriber {
+	s := make([]Subscriber, len(subscribers))
+	copy(s, subscribers)
 
-	mgrs := []*AmqpConnectionManager{}
-
-	for _, connMgr := range connMgrs {
-		_, err := NewAmqpSubscriber(connMgr, queue)
-		if err != nil {
-			//Issue connecting to this rabbitmq.
-			continue
-		}
-
-		mgrs = append(mgrs, connMgr)
-	}
-
-	if len(mgrs) == 0 {
-		return nil, errors.New("Could not create a single subscriber.")
-	}
-
-	return &MultiAmqpSubscriber{
-		connMgrs: mgrs,
-		queue:    queue,
-	}, nil
+	return &MultiSubscriber{s}
 }
 
 func NewAmqpSubscriber(connMgr *AmqpConnectionManager, queue string) (*AmqpSubscriber, error) {
