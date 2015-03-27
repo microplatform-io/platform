@@ -60,6 +60,8 @@ func (s *AmqpSubscription) Run() error {
 }
 
 func (s *AmqpSubscription) run(ch *amqp.Channel) error {
+	logger.Println("> subscription is being bound")
+
 	defer ch.Close()
 
 	_, err := ch.QueueDeclare(s.queue, false, true, false, false, nil)
@@ -84,6 +86,8 @@ func (s *AmqpSubscription) run(ch *amqp.Channel) error {
 		return err
 	}
 
+	logger.Println("> subscription has been bound")
+
 	for {
 		for msg := range msgs {
 			if s.topic == "" || (s.topic == msg.RoutingKey) {
@@ -102,6 +106,8 @@ func (s *AmqpSubscription) run(ch *amqp.Channel) error {
 			}
 		}
 	}
+
+	logger.Println("> subscription has returned")
 
 	return nil
 }
