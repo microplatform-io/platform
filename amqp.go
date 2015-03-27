@@ -106,7 +106,7 @@ func (s *AmqpSubscription) run(ch *amqp.Channel) error {
 				msg.Reject(true)
 			}
 
-		case <-s.connMgr.conn.NotifyClose(make(chan *amqp.Error)):
+		case <-s.connMgr.closedChan:
 			break
 		}
 	}
@@ -252,7 +252,8 @@ type AmqpConnectionManager struct {
 	port        string
 	virtualHost string
 
-	conn *amqp.Connection
+	conn        *amqp.Connection
+	closedChanS chan *amqp.Error
 }
 
 // Return the existing connection if one has already been established, or
@@ -268,9 +269,10 @@ func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
 	}
 
 	cm.conn = conn
+	cm.closedChan = make(chan *amqp.Error, 0)
 
 	go func() {
-		amqpErr := <-conn.NotifyClose(make(chan *amqp.Error, 0))
+		amqpErr := <-conn.NotifyClose(cm.closedChan)
 
 		logger.Println("> connection has been closed:", amqpErr)
 
