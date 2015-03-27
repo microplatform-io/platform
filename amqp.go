@@ -89,7 +89,8 @@ func (s *AmqpSubscription) run(ch *amqp.Channel) error {
 	logger.Println("> subscription has been bound")
 
 	for {
-		for msg := range msgs {
+		select {
+		case msg := <-msgs:
 			if s.topic == "" || (s.topic == msg.RoutingKey) {
 				if err := s.handler.HandleMessage(msg.Body); err != nil {
 					// If this message has already been redelivered once, just ack it to discard it
@@ -104,6 +105,9 @@ func (s *AmqpSubscription) run(ch *amqp.Channel) error {
 			} else {
 				msg.Reject(true)
 			}
+
+		case <-s.connMgr.conn.NotifyClose(make(chan *amqp.Error)):
+			break
 		}
 	}
 
