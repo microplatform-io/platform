@@ -304,8 +304,10 @@ func (cm *AmqpConnectionManager) reconnect() (*amqp.Connection, error) {
 		}
 
 		// Notify about being done with the reconnect
-		close(cm.reconnectingChan)
-		cm.reconnectingChan = nil
+		if cm.reconnectingChan != nil {
+			close(cm.reconnectingChan)
+			cm.reconnectingChan = nil
+		}
 	}()
 
 	return conn, nil
