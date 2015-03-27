@@ -252,8 +252,8 @@ type AmqpConnectionManager struct {
 	port        string
 	virtualHost string
 
-	conn        *amqp.Connection
-	closedChanS chan *amqp.Error
+	conn       *amqp.Connection
+	closedChan chan *amqp.Error
 }
 
 // Return the existing connection if one has already been established, or
