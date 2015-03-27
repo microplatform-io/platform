@@ -264,8 +264,20 @@ func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
 
 		logger.Println("> connection has been closed:", amqpErr)
 
-		// Unset the connection so a subsequent call generates a new one
-		cm.conn = nil
+		for i := 0; i < 5; i++ {
+			logger.Println("> attempting to reconnect...")
+
+			time.Sleep(time.Duration(i) * 5 * time.Second)
+
+			if _, err := cm.GetConnection(); err != nil {
+				logger.Println("> failed to reconnect:", err)
+				continue
+			}
+
+			logger.Println("> reconnected!")
+
+			break
+		}
 	}()
 
 	return cm.conn, nil
