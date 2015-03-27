@@ -107,11 +107,10 @@ func (s *AmqpSubscription) run(ch *amqp.Channel) error {
 			}
 
 		case <-s.connMgr.closedChan:
-			break
+			logger.Println("> connection has closed")
+			return nil
 		}
 	}
-
-	logger.Println("> subscription has returned")
 
 	return nil
 }
