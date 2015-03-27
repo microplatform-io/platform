@@ -277,7 +277,7 @@ func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
 		for i := 0; i < 5; i++ {
 			logger.Println("> attempting to reconnect...")
 
-			time.Sleep(time.Duration(i) * 5 * time.Second)
+			time.Sleep(time.Duration(i+1) * 5 * time.Second)
 
 			if _, err := cm.GetConnection(); err != nil {
 				logger.Println("> failed to reconnect:", err)
