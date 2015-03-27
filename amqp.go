@@ -15,7 +15,7 @@ type AmqpSubscription struct {
 	queue   string
 	topic   string
 	handler ConsumerHandler
-	ch      *amqp.Channel
+	connMgr *AmqpConnectionManager
 }
 
 type MultiSubscription struct {
@@ -42,18 +42,36 @@ func (s *MultiSubscription) Run() error {
 // it to the exchange and topic. This function blocks permanently, so consider
 // invoking it inside of a goroutine
 func (s *AmqpSubscription) Run() error {
-	defer s.ch.Close()
+	for {
+		conn, err := s.connMgr.GetConnection()
+		if err != nil {
+			return err
+		}
 
-	_, err := s.ch.QueueDeclare(s.queue, false, true, false, false, nil)
+		ch, err := conn.Channel()
+		if err != nil {
+			return err
+		}
+
+		s.run(ch)
+	}
+
+	return nil
+}
+
+func (s *AmqpSubscription) run(ch *amqp.Channel) error {
+	defer ch.Close()
+
+	_, err := ch.QueueDeclare(s.queue, false, true, false, false, nil)
 	if err != nil {
 		return err
 	}
 
-	if err := s.ch.QueueBind(s.queue, s.topic, "amq.topic", false, nil); err != nil {
+	if err := ch.QueueBind(s.queue, s.topic, "amq.topic", false, nil); err != nil {
 		return err
 	}
 
-	msgs, err := s.ch.Consume(
+	msgs, err := ch.Consume(
 		s.queue, // queue
 		s.topic, // consumer
 		false,   // auto-ack
@@ -165,21 +183,11 @@ type AmqpSubscriber struct {
 }
 
 func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) (Subscription, error) {
-	conn, err := s.connMgr.GetConnection()
-	if err != nil {
-		return nil, err
-	}
-
-	ch, err := conn.Channel()
-	if err != nil {
-		return nil, err
-	}
-
 	return &AmqpSubscription{
 		queue:   s.queue,
 		topic:   topic,
-		ch:      ch,
 		handler: handler,
+		connMgr: s.connMgr,
 	}, nil
 }
 
@@ -250,6 +258,15 @@ func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
 	}
 
 	cm.conn = conn
+
+	go func() {
+		amqpErr := <-conn.NotifyClose(make(chan *amqp.Error, 0))
+
+		logger.Println("> connection has been closed:", amqpErr)
+
+		// Unset the connection so a subsequent call generates a new one
+		cm.conn = nil
+	}()
 
 	return cm.conn, nil
 }
