@@ -251,8 +251,9 @@ type AmqpConnectionManager struct {
 	port        string
 	virtualHost string
 
-	conn       *amqp.Connection
-	closedChan chan *amqp.Error
+	conn             *amqp.Connection
+	closedChan       chan *amqp.Error
+	reconnectingChan chan struct{}
 }
 
 // Return the existing connection if one has already been established, or
@@ -262,6 +263,14 @@ func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
 		return cm.conn, nil
 	}
 
+	if cm.reconnectingChan != nil {
+		<-cm.reconnectingChan
+	}
+
+	return cm.reconnect()
+}
+
+func (cm *AmqpConnectionManager) reconnect() (*amqp.Connection, error) {
 	conn, err := amqp.Dial("amqp://" + cm.user + ":" + cm.pass + "@" + cm.host + ":" + cm.port + "/" + cm.virtualHost)
 	if err != nil {
 		return nil, err
@@ -273,16 +282,18 @@ func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
 	go func() {
 		amqpErr := <-conn.NotifyClose(cm.closedChan)
 
-		logger.Println("> connection has been closed:", amqpErr)
-
+		cm.reconnectingChan = make(chan struct{}, 0)
 		cm.conn = nil
+
+		logger.Println("> connection has been closed:", amqpErr)
 
 		for i := 0; i < 5; i++ {
 			logger.Println("> attempting to reconnect...")
 
 			time.Sleep(time.Duration(i) * 5 * time.Second)
 
-			if _, err := cm.GetConnection(); err != nil {
+			cm.conn, err = cm.reconnect()
+			if err != nil {
 				logger.Println("> failed to reconnect:", err)
 				continue
 			}
@@ -291,9 +302,13 @@ func (cm *AmqpConnectionManager) GetConnection() (*amqp.Connection, error) {
 
 			break
 		}
+
+		// Notify about being done with the reconnect
+		close(cm.reconnectingChan)
+		cm.reconnectingChan = nil
 	}()
 
-	return cm.conn, nil
+	return conn, nil
 }
 
 // Generate a new connection manager with all of the credentials needed to establish
