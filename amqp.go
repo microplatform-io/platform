@@ -287,10 +287,13 @@ func (cm *AmqpConnectionManager) reconnect() (*amqp.Connection, error) {
 
 		logger.Println("> connection has been closed:", amqpErr)
 
-		for i := 0; i < 5; i++ {
+		i := 0
+		for {
+			i += 1
+
 			logger.Println("> attempting to reconnect...")
 
-			time.Sleep(time.Duration(i) * 5 * time.Second)
+			time.Sleep(time.Duration((i%5)+1) * time.Second)
 
 			cm.conn, err = cm.reconnect()
 			if err != nil {
