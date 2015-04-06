@@ -9,6 +9,8 @@ import (
 	"time"
 )
 
+const PUBLISH_RETRIES = 3
+
 // The amqp subscription acts as an isolated unit of code that can
 // run the range over messages that the amqp channel has to offer.
 type AmqpSubscription struct {
@@ -127,27 +129,38 @@ type MultiPublisher struct {
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 	logger.Printf("[amqp] > publishing for %s", topic)
 
-	conn, err := p.connMgr.GetConnection()
-	if err != nil {
-		return err
+	var publishErr error
+
+	for i := 0; i < PUBLISH_RETRIES; i++ {
+		conn, err := p.connMgr.GetConnection()
+		if err != nil {
+			return err
+		}
+
+		ch, err := conn.Channel()
+		if err != nil {
+			return err
+		}
+		defer ch.Close()
+
+		publishErr = ch.Publish(
+			"amq.topic", // exchange
+			topic,       // routing key
+			false,       // mandatory
+			false,       // immediate
+			amqp.Publishing{
+				ContentType: "text/plain",
+				Body:        body,
+			},
+		)
+		if publishErr == nil {
+			return nil
+		}
+
+		p.connMgr.reconnect()
 	}
 
-	ch, err := conn.Channel()
-	if err != nil {
-		return err
-	}
-	defer ch.Close()
-
-	return ch.Publish(
-		"amq.topic", // exchange
-		topic,       // routing key
-		false,       // mandatory
-		false,       // immediate
-		amqp.Publishing{
-			ContentType: "text/plain",
-			Body:        body,
-		},
-	)
+	return publishErr
 }
 
 func (p *MultiPublisher) Publish(topic string, body []byte) error {

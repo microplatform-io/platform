@@ -38,7 +38,9 @@ func (sr *StandardRouter) Route(msg *RoutedMessage, timeout time.Duration) (*Rou
 	sr.pendingRequests[msg.GetId()] = responseChan
 	sr.mu.Unlock()
 
-	sr.publisher.Publish(fmt.Sprintf("%d_%d", msg.GetMethod(), msg.GetResource()), payload)
+	if err := sr.publisher.Publish(fmt.Sprintf("%d_%d", msg.GetMethod(), msg.GetResource()), payload); err != nil {
+		return nil, err
+	}
 
 	var response *RoutedMessage
 
