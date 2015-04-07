@@ -48,14 +48,25 @@ func (sr *StandardRouter) Route(msg *RoutedMessage, timeout time.Duration) (*Rou
 	case response = <-responseChan:
 		// Good to proceed
 	case <-time.After(timeout):
-		err = errors.New("TIMEOUT")
+		// Emit a request timeout to any microservice that is interested
+		sr.publisher.Publish("request.timeout", payload)
+
+		errorBytes, _ := Marshal(&Error{
+			Message: String("API Request has timed out"),
+		})
+
+		response = &RoutedMessage{
+			Method:   Int32(int32(Method_REPLY)),
+			Resource: Int32(int32(Resource_ERROR)),
+			Body:     errorBytes,
+		}
 	}
 
 	sr.mu.Lock()
 	delete(sr.pendingRequests, msg.GetId())
 	sr.mu.Unlock()
 
-	return response, err
+	return response, nil
 }
 
 func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
