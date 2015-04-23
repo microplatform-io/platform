@@ -4,7 +4,7 @@ message Request {
     optional bytes body             = 1;
     optional int32 resource         = 2;
     optional int32 method           = 3;
-    optional string ip_adddress     = 4;
+    optional string ip_address     = 4;
 }
 
 message RoutedMessage {

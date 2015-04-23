@@ -100,7 +100,7 @@ type Request struct {
 	Body             []byte  `protobuf:"bytes,1,opt,name=body" json:"body,omitempty"`
 	Resource         *int32  `protobuf:"varint,2,opt,name=resource" json:"resource,omitempty"`
 	Method           *int32  `protobuf:"varint,3,opt,name=method" json:"method,omitempty"`
-	IpAdddress       *string `protobuf:"bytes,4,opt,name=ip_adddress" json:"ip_adddress,omitempty"`
+	IpAddress        *string `protobuf:"bytes,4,opt,name=ip_address" json:"ip_address,omitempty"`
 	XXX_unrecognized []byte  `json:"-"`
 }
 
@@ -129,9 +129,9 @@ func (m *Request) GetMethod() int32 {
 	return 0
 }
 
-func (m *Request) GetIpAdddress() string {
-	if m != nil && m.IpAdddress != nil {
-		return *m.IpAdddress
+func (m *Request) GetIpAddress() string {
+	if m != nil && m.IpAddress != nil {
+		return *m.IpAddress
 	}
 	return ""
 }
