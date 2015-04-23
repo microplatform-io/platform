@@ -97,21 +97,22 @@ func (x *Resource) UnmarshalJSON(data []byte) error {
 }
 
 type Request struct {
-	Method           *int32 `protobuf:"varint,3,opt,name=method" json:"method,omitempty"`
-	Resource         *int32 `protobuf:"varint,2,opt,name=resource" json:"resource,omitempty"`
-	Body             []byte `protobuf:"bytes,1,opt,name=body" json:"body,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Body             []byte  `protobuf:"bytes,1,opt,name=body" json:"body,omitempty"`
+	Resource         *int32  `protobuf:"varint,2,opt,name=resource" json:"resource,omitempty"`
+	Method           *int32  `protobuf:"varint,3,opt,name=method" json:"method,omitempty"`
+	IpAdddress       *string `protobuf:"bytes,4,opt,name=ip_adddress" json:"ip_adddress,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
 func (m *Request) String() string { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()    {}
 
-func (m *Request) GetMethod() int32 {
-	if m != nil && m.Method != nil {
-		return *m.Method
+func (m *Request) GetBody() []byte {
+	if m != nil {
+		return m.Body
 	}
-	return 0
+	return nil
 }
 
 func (m *Request) GetResource() int32 {
@@ -121,11 +122,18 @@ func (m *Request) GetResource() int32 {
 	return 0
 }
 
-func (m *Request) GetBody() []byte {
-	if m != nil {
-		return m.Body
+func (m *Request) GetMethod() int32 {
+	if m != nil && m.Method != nil {
+		return *m.Method
 	}
-	return nil
+	return 0
+}
+
+func (m *Request) GetIpAdddress() string {
+	if m != nil && m.IpAdddress != nil {
+		return *m.IpAdddress
+	}
+	return ""
 }
 
 type RoutedMessage struct {

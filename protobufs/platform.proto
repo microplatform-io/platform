@@ -1,9 +1,10 @@
 package platform;
 
 message Request {
-    optional int32 method       = 3;
-    optional int32 resource     = 2;
-    optional bytes body         = 1;
+    optional bytes body             = 1;
+    optional int32 resource         = 2;
+    optional int32 method           = 3;
+    optional string ip_adddress     = 4;
 }
 
 message RoutedMessage {
