@@ -1,9 +1,9 @@
 package platform
 
 import (
-	"code.google.com/p/goprotobuf/proto"
 	"crypto/sha1"
 	"fmt"
+	"github.com/golang/protobuf/proto"
 	"os"
 )
 
