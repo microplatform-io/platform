@@ -16,6 +16,7 @@ It has these top-level messages:
 	DocumentationList
 	Error
 	Event
+	RouterConfig
 	PossibleError
 */
 package platform
@@ -332,6 +333,38 @@ func (m *Event) GetResource() string {
 func (m *Event) GetPayload() string {
 	if m != nil && m.Payload != nil {
 		return *m.Payload
+	}
+	return ""
+}
+
+type RouterConfig struct {
+	Protocol         *string `protobuf:"bytes,1,opt,name=protocol" json:"protocol,omitempty"`
+	Host             *string `protobuf:"bytes,2,opt,name=host" json:"host,omitempty"`
+	Port             *string `protobuf:"bytes,3,opt,name=port" json:"port,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *RouterConfig) Reset()         { *m = RouterConfig{} }
+func (m *RouterConfig) String() string { return proto.CompactTextString(m) }
+func (*RouterConfig) ProtoMessage()    {}
+
+func (m *RouterConfig) GetProtocol() string {
+	if m != nil && m.Protocol != nil {
+		return *m.Protocol
+	}
+	return ""
+}
+
+func (m *RouterConfig) GetHost() string {
+	if m != nil && m.Host != nil {
+		return *m.Host
+	}
+	return ""
+}
+
+func (m *RouterConfig) GetPort() string {
+	if m != nil && m.Port != nil {
+		return *m.Port
 	}
 	return ""
 }
