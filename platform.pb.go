@@ -16,6 +16,7 @@ It has these top-level messages:
 	DocumentationList
 	Error
 	Event
+	RouterConfig
 	PossibleError
 */
 package platform
@@ -97,21 +98,22 @@ func (x *Resource) UnmarshalJSON(data []byte) error {
 }
 
 type Request struct {
-	Method           *int32 `protobuf:"varint,3,opt,name=method" json:"method,omitempty"`
-	Resource         *int32 `protobuf:"varint,2,opt,name=resource" json:"resource,omitempty"`
-	Body             []byte `protobuf:"bytes,1,opt,name=body" json:"body,omitempty"`
-	XXX_unrecognized []byte `json:"-"`
+	Body             []byte  `protobuf:"bytes,1,opt,name=body" json:"body,omitempty"`
+	Resource         *int32  `protobuf:"varint,2,opt,name=resource" json:"resource,omitempty"`
+	Method           *int32  `protobuf:"varint,3,opt,name=method" json:"method,omitempty"`
+	IpAddress        *string `protobuf:"bytes,4,opt,name=ip_address" json:"ip_address,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
 }
 
 func (m *Request) Reset()         { *m = Request{} }
 func (m *Request) String() string { return proto.CompactTextString(m) }
 func (*Request) ProtoMessage()    {}
 
-func (m *Request) GetMethod() int32 {
-	if m != nil && m.Method != nil {
-		return *m.Method
+func (m *Request) GetBody() []byte {
+	if m != nil {
+		return m.Body
 	}
-	return 0
+	return nil
 }
 
 func (m *Request) GetResource() int32 {
@@ -121,11 +123,18 @@ func (m *Request) GetResource() int32 {
 	return 0
 }
 
-func (m *Request) GetBody() []byte {
-	if m != nil {
-		return m.Body
+func (m *Request) GetMethod() int32 {
+	if m != nil && m.Method != nil {
+		return *m.Method
 	}
-	return nil
+	return 0
+}
+
+func (m *Request) GetIpAddress() string {
+	if m != nil && m.IpAddress != nil {
+		return *m.IpAddress
+	}
+	return ""
 }
 
 type RoutedMessage struct {
@@ -324,6 +333,38 @@ func (m *Event) GetResource() string {
 func (m *Event) GetPayload() string {
 	if m != nil && m.Payload != nil {
 		return *m.Payload
+	}
+	return ""
+}
+
+type RouterConfig struct {
+	Protocol         *string `protobuf:"bytes,1,opt,name=protocol" json:"protocol,omitempty"`
+	Host             *string `protobuf:"bytes,2,opt,name=host" json:"host,omitempty"`
+	Port             *string `protobuf:"bytes,3,opt,name=port" json:"port,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *RouterConfig) Reset()         { *m = RouterConfig{} }
+func (m *RouterConfig) String() string { return proto.CompactTextString(m) }
+func (*RouterConfig) ProtoMessage()    {}
+
+func (m *RouterConfig) GetProtocol() string {
+	if m != nil && m.Protocol != nil {
+		return *m.Protocol
+	}
+	return ""
+}
+
+func (m *RouterConfig) GetHost() string {
+	if m != nil && m.Host != nil {
+		return *m.Host
+	}
+	return ""
+}
+
+func (m *RouterConfig) GetPort() string {
+	if m != nil && m.Port != nil {
+		return *m.Port
 	}
 	return ""
 }

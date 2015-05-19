@@ -1,9 +1,10 @@
 package platform;
 
 message Request {
-    optional int32 method       = 3;
-    optional int32 resource     = 2;
-    optional bytes body         = 1;
+    optional bytes body             = 1;
+    optional int32 resource         = 2;
+    optional int32 method           = 3;
+    optional string ip_address     = 4;
 }
 
 message RoutedMessage {
@@ -41,6 +42,12 @@ message Event {
     optional string method          = 1;
     optional string resource        = 2;
     optional string payload         = 3;
+}
+
+message RouterConfig {
+	optional string protocol    = 1;
+	optional string host        = 2;
+	optional string port        = 3;
 }
 
 enum Method {
