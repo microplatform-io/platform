@@ -1,7 +1,7 @@
 package platform
 
 import (
-	"code.google.com/p/goprotobuf/proto"
+	"github.com/golang/protobuf/proto"
 )
 
 const ORGANIZATION = "platform"
