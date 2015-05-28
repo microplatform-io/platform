@@ -50,6 +50,10 @@ message RouterConfig {
 	optional string port        = 3;
 }
 
+message RouterConfigList {
+    repeated RouterConfig router_configs = 1;
+}
+
 enum Method {
     REPLY       = 14;
     GET         = 15;

@@ -17,6 +17,7 @@ It has these top-level messages:
 	Error
 	Event
 	RouterConfig
+	RouterConfigList
 	PossibleError
 */
 package platform
@@ -367,6 +368,22 @@ func (m *RouterConfig) GetPort() string {
 		return *m.Port
 	}
 	return ""
+}
+
+type RouterConfigList struct {
+	RouterConfigs    []*RouterConfig `protobuf:"bytes,1,rep,name=router_configs" json:"router_configs,omitempty"`
+	XXX_unrecognized []byte          `json:"-"`
+}
+
+func (m *RouterConfigList) Reset()         { *m = RouterConfigList{} }
+func (m *RouterConfigList) String() string { return proto.CompactTextString(m) }
+func (*RouterConfigList) ProtoMessage()    {}
+
+func (m *RouterConfigList) GetRouterConfigs() []*RouterConfig {
+	if m != nil {
+		return m.RouterConfigs
+	}
+	return nil
 }
 
 type PossibleError struct {
