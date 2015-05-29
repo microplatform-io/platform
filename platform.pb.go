@@ -131,36 +131,36 @@ func (x *RouterConfig_RouterType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type RouterConfig_Protocol_ProtocolType int32
+type RouterConfig_ProtocolType int32
 
 const (
-	RouterConfig_Protocol_PROTOCOL_TYPE_HTTP  RouterConfig_Protocol_ProtocolType = 1
-	RouterConfig_Protocol_PROTOCOL_TYPE_HTTPS RouterConfig_Protocol_ProtocolType = 2
+	RouterConfig_PROTOCOL_TYPE_HTTP  RouterConfig_ProtocolType = 1
+	RouterConfig_PROTOCOL_TYPE_HTTPS RouterConfig_ProtocolType = 2
 )
 
-var RouterConfig_Protocol_ProtocolType_name = map[int32]string{
+var RouterConfig_ProtocolType_name = map[int32]string{
 	1: "PROTOCOL_TYPE_HTTP",
 	2: "PROTOCOL_TYPE_HTTPS",
 }
-var RouterConfig_Protocol_ProtocolType_value = map[string]int32{
+var RouterConfig_ProtocolType_value = map[string]int32{
 	"PROTOCOL_TYPE_HTTP":  1,
 	"PROTOCOL_TYPE_HTTPS": 2,
 }
 
-func (x RouterConfig_Protocol_ProtocolType) Enum() *RouterConfig_Protocol_ProtocolType {
-	p := new(RouterConfig_Protocol_ProtocolType)
+func (x RouterConfig_ProtocolType) Enum() *RouterConfig_ProtocolType {
+	p := new(RouterConfig_ProtocolType)
 	*p = x
 	return p
 }
-func (x RouterConfig_Protocol_ProtocolType) String() string {
-	return proto.EnumName(RouterConfig_Protocol_ProtocolType_name, int32(x))
+func (x RouterConfig_ProtocolType) String() string {
+	return proto.EnumName(RouterConfig_ProtocolType_name, int32(x))
 }
-func (x *RouterConfig_Protocol_ProtocolType) UnmarshalJSON(data []byte) error {
-	value, err := proto.UnmarshalJSONEnum(RouterConfig_Protocol_ProtocolType_value, data, "RouterConfig_Protocol_ProtocolType")
+func (x *RouterConfig_ProtocolType) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(RouterConfig_ProtocolType_value, data, "RouterConfig_ProtocolType")
 	if err != nil {
 		return err
 	}
-	*x = RouterConfig_Protocol_ProtocolType(value)
+	*x = RouterConfig_ProtocolType(value)
 	return nil
 }
 
@@ -405,22 +405,22 @@ func (m *Event) GetPayload() string {
 }
 
 type RouterConfig struct {
-	Protocol         *RouterConfig_Protocol   `protobuf:"bytes,1,opt,name=protocol" json:"protocol,omitempty"`
-	Host             *string                  `protobuf:"bytes,2,opt,name=host" json:"host,omitempty"`
-	Port             *string                  `protobuf:"bytes,3,opt,name=port" json:"port,omitempty"`
-	RouterType       *RouterConfig_RouterType `protobuf:"varint,4,opt,name=router_type,enum=platform.RouterConfig_RouterType" json:"router_type,omitempty"`
-	XXX_unrecognized []byte                   `json:"-"`
+	ProtocolType     *RouterConfig_ProtocolType `protobuf:"varint,1,opt,name=protocol_type,enum=platform.RouterConfig_ProtocolType" json:"protocol_type,omitempty"`
+	Host             *string                    `protobuf:"bytes,2,opt,name=host" json:"host,omitempty"`
+	Port             *string                    `protobuf:"bytes,3,opt,name=port" json:"port,omitempty"`
+	RouterType       *RouterConfig_RouterType   `protobuf:"varint,4,opt,name=router_type,enum=platform.RouterConfig_RouterType" json:"router_type,omitempty"`
+	XXX_unrecognized []byte                     `json:"-"`
 }
 
 func (m *RouterConfig) Reset()         { *m = RouterConfig{} }
 func (m *RouterConfig) String() string { return proto.CompactTextString(m) }
 func (*RouterConfig) ProtoMessage()    {}
 
-func (m *RouterConfig) GetProtocol() *RouterConfig_Protocol {
-	if m != nil {
-		return m.Protocol
+func (m *RouterConfig) GetProtocolType() RouterConfig_ProtocolType {
+	if m != nil && m.ProtocolType != nil {
+		return *m.ProtocolType
 	}
-	return nil
+	return RouterConfig_PROTOCOL_TYPE_HTTP
 }
 
 func (m *RouterConfig) GetHost() string {
@@ -442,30 +442,6 @@ func (m *RouterConfig) GetRouterType() RouterConfig_RouterType {
 		return *m.RouterType
 	}
 	return RouterConfig_ROUTER_TYPE_WEBSOCKET
-}
-
-type RouterConfig_Protocol struct {
-	ProtocolType     *RouterConfig_Protocol_ProtocolType `protobuf:"varint,1,opt,name=protocol_type,enum=platform.RouterConfig_Protocol_ProtocolType" json:"protocol_type,omitempty"`
-	ProtocolName     *string                             `protobuf:"bytes,2,opt,name=protocol_name" json:"protocol_name,omitempty"`
-	XXX_unrecognized []byte                              `json:"-"`
-}
-
-func (m *RouterConfig_Protocol) Reset()         { *m = RouterConfig_Protocol{} }
-func (m *RouterConfig_Protocol) String() string { return proto.CompactTextString(m) }
-func (*RouterConfig_Protocol) ProtoMessage()    {}
-
-func (m *RouterConfig_Protocol) GetProtocolType() RouterConfig_Protocol_ProtocolType {
-	if m != nil && m.ProtocolType != nil {
-		return *m.ProtocolType
-	}
-	return RouterConfig_Protocol_PROTOCOL_TYPE_HTTP
-}
-
-func (m *RouterConfig_Protocol) GetProtocolName() string {
-	if m != nil && m.ProtocolName != nil {
-		return *m.ProtocolName
-	}
-	return ""
 }
 
 type RouterConfigList struct {
@@ -512,5 +488,5 @@ func init() {
 	proto.RegisterEnum("platform.Method", Method_name, Method_value)
 	proto.RegisterEnum("platform.Resource", Resource_name, Resource_value)
 	proto.RegisterEnum("platform.RouterConfig_RouterType", RouterConfig_RouterType_name, RouterConfig_RouterType_value)
-	proto.RegisterEnum("platform.RouterConfig_Protocol_ProtocolType", RouterConfig_Protocol_ProtocolType_name, RouterConfig_Protocol_ProtocolType_value)
+	proto.RegisterEnum("platform.RouterConfig_ProtocolType", RouterConfig_ProtocolType_name, RouterConfig_ProtocolType_value)
 }
