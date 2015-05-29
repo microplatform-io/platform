@@ -45,9 +45,25 @@ message Event {
 }
 
 message RouterConfig {
-	optional string protocol    = 1;
-	optional string host        = 2;
-	optional string port        = 3;
+    enum RouterType {
+        ROUTER_TYPE_WEBSOCKET   = 1;
+        ROUTER_TYPE_GRPC        = 2;
+    }
+
+    message Protocol {
+        enum ProtocolType {
+            PROTOCOL_TYPE_HTTP = 1;
+            PROTOCOL_TYPE_HTTPS = 2;
+        }
+
+        optional ProtocolType protocol_type  = 1;
+        optional string protocol_name        = 2;
+    }
+
+	optional Protocol protocol             = 1;
+	optional string host                   = 2;
+	optional string port                   = 3;
+    optional RouterType router_type        = 4;
 }
 
 message RouterConfigList {
