@@ -15,8 +15,6 @@ var (
 type Service struct {
 	publisher  Publisher
 	subscriber Subscriber
-
-	subscriptions []Subscription
 }
 
 func (s *Service) AddHandler(method, resource interface{}, handler Handler) {
@@ -24,18 +22,13 @@ func (s *Service) AddHandler(method, resource interface{}, handler Handler) {
 }
 
 func (s *Service) AddListener(topic string, handler ConsumerHandler) {
-	subscription, err := s.subscriber.Subscribe(topic, handler)
-	if err != nil {
-		logger.Fatalf("Failed to create to subscriber: %s\n", err)
-	}
-
-	s.subscriptions = append(s.subscriptions, subscription)
+	s.subscriber.Subscribe(topic, handler)
 }
 
 func (s *Service) AddTopicHandler(topic string, handler Handler) {
 	logger.Println("> adding topic handler", topic)
 
-	subscription, err := s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(p []byte) error {
+	s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(p []byte) error {
 		logger.Printf("> handling %s request", topic)
 
 		request := &RoutedMessage{}
@@ -60,27 +53,11 @@ func (s *Service) AddTopicHandler(topic string, handler Handler) {
 
 		return s.publisher.Publish(request.GetReplyTopic(), payload)
 	}))
-	if err != nil {
-		logger.Fatalf("> failed to create a handler: %s", err)
-	}
-
-	s.subscriptions = append(s.subscriptions, subscription)
 }
 
 func (s *Service) Run() {
-	quit := make(chan struct{}, len(s.subscriptions))
+	s.subscriber.Run()
 
-	for i := range s.subscriptions {
-		go func(i int) {
-			logger.Printf("Running subscription: %#v", s.subscriptions[i])
-			logger.Printf("Subscription has stopped: %#v : %s", s.subscriptions[i], s.subscriptions[i].Run())
-
-			quit <- struct{}{}
-		}(i)
-	}
-
-	logger.Println("Serving all topics")
-	<-quit
 	logger.Println("Subscriptions have stopped")
 }
 

@@ -15,11 +15,8 @@ func (handlerFunc HandlerFunc) HandleRoutedMessage(cloudMessage *RoutedMessage) 
 }
 
 type Subscriber interface {
-	Subscribe(topic string, handler ConsumerHandler) (Subscription, error)
-}
-
-type Subscription interface {
 	Run() error
+	Subscribe(topic string, handler ConsumerHandler)
 }
 
 type Publisher interface {

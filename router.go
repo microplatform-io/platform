@@ -81,7 +81,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 		pendingRequests: map[string]chan *RoutedMessage{},
 	}
 
-	subscription, err := subscriber.Subscribe(router.topic, ConsumerHandlerFunc(func(body []byte) error {
+	subscriber.Subscribe(router.topic, ConsumerHandlerFunc(func(body []byte) error {
 		logger.Println("> receiving message for router")
 
 		routedMessage := &RoutedMessage{}
@@ -99,14 +99,13 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 
 		return nil
 	}))
-	if err != nil {
-		logger.Fatalf("> failed to create a subscription: %s", err)
-	}
 
 	go func() {
 		for i := 0; i <= 100; i++ {
-			logger.Println("> running subscription...")
-			subscription.Run()
+			logger.Println("> running subscriber...")
+			if err := subscriber.Run(); err != nil {
+				logger.Printf("> subscriber has exited: %s", err)
+			}
 
 			time.Sleep(time.Duration(i%5) * time.Second)
 		}
