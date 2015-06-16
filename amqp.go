@@ -5,6 +5,7 @@ import (
 	"github.com/streadway/amqp"
 	"math/rand"
 	"net"
+	"sync"
 	"time"
 )
 
