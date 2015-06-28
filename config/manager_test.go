@@ -229,3 +229,55 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		})
 	})
 }
+
+func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
+	Convey("Just testing our use case where the etcd config would come from the env", t, func() {
+		mux := http.NewServeMux()
+		mux.Handle("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, "etcd 0.4.6")
+		}))
+		mux.Handle("/v2/keys/RABBITMQ/5672", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":4,"createdIndex":4}],"modifiedIndex":3,"createdIndex":3}],"modifiedIndex":3,"createdIndex":3}}`)
+		}))
+
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		So(err, ShouldBeNil)
+
+		etcdAddr := strings.Split(u.Host, ":")[0]
+		etcdPort := strings.Split(u.Host, ":")[1]
+
+		arrayConfigManager, err := NewArrayConfigManager([]string{
+			"ETCD_1_PORT_4001_TCP_ADDR=" + etcdAddr,
+			"ETCD_1_PORT_4001_TCP_PORT=" + etcdPort,
+		})
+
+		etcdServiceConfigs, err := arrayConfigManager.FetchServiceConfigs("ETCD", "4001")
+		So(err, ShouldBeNil)
+		So(etcdServiceConfigs, ShouldResemble, []*ServiceConfig{
+			&ServiceConfig{
+				Index: "1",
+				Addr:  etcdAddr,
+				Port:  etcdPort,
+			},
+		})
+
+		etcdConfigManager, err := NewEtcdConfigManager(etcdServiceConfigs[0])
+		So(err, ShouldBeNil)
+		So(etcdConfigManager, ShouldNotBeNil)
+
+		rabbitmqServiceConfigs, err := etcdConfigManager.FetchServiceConfigs("RABBITMQ", "5672")
+		So(err, ShouldBeNil)
+		So(rabbitmqServiceConfigs, ShouldResemble, []*ServiceConfig{
+			&ServiceConfig{
+				User:  "",
+				Pass:  "",
+				Index: "123",
+				Addr:  "127.0.0.1",
+				Port:  "5672",
+			},
+		})
+	})
+}
