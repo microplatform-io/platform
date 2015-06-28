@@ -1,7 +1,12 @@
 package config
 
 import (
+	"fmt"
 	. "github.com/smartystreets/goconvey/convey"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 )
 
@@ -177,6 +182,50 @@ func TestParseServiceVariableString(t *testing.T) {
 			Index: "1",
 			Port:  "5672",
 			Key:   "USER",
+		})
+	})
+}
+
+func TestNewEtcdConfigManager(t *testing.T) {
+	Convey("Providing a nil service config return an error", t, func() {
+		etcdConfigManager, err := NewEtcdConfigManager(nil)
+		So(etcdConfigManager, ShouldBeNil)
+		So(err, ShouldNotBeNil)
+	})
+
+	Convey("Using the etcd config manager with established endpoints should return a valid service config when queried", t, func() {
+		mux := http.NewServeMux()
+		mux.Handle("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, "etcd 0.4.6")
+		}))
+		mux.Handle("/v2/keys/RABBITMQ/5672", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":4,"createdIndex":4}],"modifiedIndex":3,"createdIndex":3}],"modifiedIndex":3,"createdIndex":3}}`)
+		}))
+
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		So(err, ShouldBeNil)
+
+		etcdConfigManager, err := NewEtcdConfigManager(&ServiceConfig{
+			Addr: strings.Split(u.Host, ":")[0],
+			Port: strings.Split(u.Host, ":")[1],
+		})
+		So(err, ShouldBeNil)
+		So(etcdConfigManager, ShouldNotBeNil)
+		So(etcdConfigManager.client, ShouldNotBeNil)
+
+		serviceConfigs, err := etcdConfigManager.FetchServiceConfigs("RABBITMQ", "5672")
+		So(err, ShouldBeNil)
+		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
+			&ServiceConfig{
+				User:  "",
+				Pass:  "",
+				Index: "123",
+				Addr:  "127.0.0.1",
+				Port:  "5672",
+			},
 		})
 	})
 }

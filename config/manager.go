@@ -2,6 +2,7 @@ package config
 
 import (
 	"errors"
+	"github.com/coreos/go-etcd/etcd"
 	"os"
 	"strings"
 )
@@ -175,4 +176,57 @@ func NewArrayConfigManager(serviceVariableStrings []string) (*ArrayConfigManager
 
 func NewEnvConfigManager() (*ArrayConfigManager, error) {
 	return NewArrayConfigManager(os.Environ())
+}
+
+func getEtcdBasename(key string) string {
+	keyParts := strings.Split(key, "/")
+
+	return keyParts[len(keyParts)-1]
+}
+
+type EtcdConfigManager struct {
+	*ServiceConfig
+
+	client *etcd.Client
+}
+
+func (ecm *EtcdConfigManager) FetchServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
+	response, err := ecm.client.Get(serviceName+"/"+servicePort, false, true)
+	if err != nil {
+		return nil, err
+	}
+
+	serviceConfigs := []*ServiceConfig{}
+
+	for _, serviceRootNode := range response.Node.Nodes {
+		serviceConfig := &ServiceConfig{
+			Index: getEtcdBasename(serviceRootNode.Key),
+		}
+
+		for _, serviceAttrNode := range serviceRootNode.Nodes {
+			switch strings.ToUpper(getEtcdBasename(serviceAttrNode.Key)) {
+			case SERVICE_VARIABLE_KEY_ADDR:
+				serviceConfig.Addr = serviceAttrNode.Value
+			case SERVICE_VARIABLE_KEY_PORT:
+				serviceConfig.Port = serviceAttrNode.Value
+			}
+		}
+
+		serviceConfigs = append(serviceConfigs, serviceConfig)
+	}
+
+	return serviceConfigs, nil
+}
+
+func NewEtcdConfigManager(serviceConfig *ServiceConfig) (*EtcdConfigManager, error) {
+	if serviceConfig == nil {
+		return nil, errors.New("Invalid service config provded")
+	}
+
+	client := etcd.NewClient([]string{"http://" + serviceConfig.Addr + ":" + serviceConfig.Port})
+
+	return &EtcdConfigManager{
+		ServiceConfig: serviceConfig,
+		client:        client,
+	}, nil
 }
