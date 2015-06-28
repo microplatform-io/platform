@@ -11,17 +11,17 @@ import (
 )
 
 func TestArrayConfigManager(t *testing.T) {
-	Convey("Fetching a service without any environment variables set should return an error", t, func() {
+	Convey("Geting a service without any environment variables set should return an error", t, func() {
 		configManager, err := NewArrayConfigManager([]string{})
 		So(err, ShouldBeNil)
 		So(configManager, ShouldNotBeNil)
 
-		serviceConfigs, err := configManager.FetchServiceConfigs("RABBITMQ", "5672")
+		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldEqual, NoServiceConfigs)
 		So(len(serviceConfigs), ShouldEqual, 0)
 	})
 
-	Convey("Fetching a service config that has values set should return a service config", t, func() {
+	Convey("Geting a service config that has values set should return a service config", t, func() {
 		configManager, err := NewArrayConfigManager([]string{
 			"RABBITMQ_1_PORT_5672_TCP_ADDR=127.0.0.1",
 			"RABBITMQ_1_PORT_5672_TCP_PORT=5672",
@@ -29,7 +29,7 @@ func TestArrayConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(configManager, ShouldNotBeNil)
 
-		serviceConfigs, err := configManager.FetchServiceConfigs("RABBITMQ", "5672")
+		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(len(serviceConfigs), ShouldEqual, 1)
 		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
@@ -53,7 +53,7 @@ func TestArrayConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(configManager, ShouldNotBeNil)
 
-		serviceConfigs, err := configManager.FetchServiceConfigs("RABBITMQ", "5672")
+		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
 			&ServiceConfig{
@@ -76,7 +76,7 @@ func TestArrayConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(configManager, ShouldNotBeNil)
 
-		serviceConfigs, err := configManager.FetchServiceConfigs("RABBITMQ", "5672")
+		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
 			&ServiceConfig{
@@ -101,7 +101,7 @@ func TestArrayConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(configManager, ShouldNotBeNil)
 
-		serviceConfigs, err := configManager.FetchServiceConfigs("RABBITMQ", "5672")
+		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(len(serviceConfigs), ShouldEqual, 2)
 		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
@@ -132,7 +132,7 @@ func TestArrayConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(configManager, ShouldNotBeNil)
 
-		serviceConfigs, err := configManager.FetchServiceConfigs("RABBITMQ", "5672")
+		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(len(serviceConfigs), ShouldEqual, 2)
 		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
@@ -216,7 +216,7 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		So(etcdConfigManager, ShouldNotBeNil)
 		So(etcdConfigManager.client, ShouldNotBeNil)
 
-		serviceConfigs, err := etcdConfigManager.FetchServiceConfigs("RABBITMQ", "5672")
+		serviceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
 			&ServiceConfig{
@@ -254,7 +254,7 @@ func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
 			"ETCD_1_PORT_4001_TCP_PORT=" + etcdPort,
 		})
 
-		etcdServiceConfigs, err := arrayConfigManager.FetchServiceConfigs("ETCD", "4001")
+		etcdServiceConfigs, err := arrayConfigManager.GetServiceConfigs("ETCD", "4001")
 		So(err, ShouldBeNil)
 		So(etcdServiceConfigs, ShouldResemble, []*ServiceConfig{
 			&ServiceConfig{
@@ -268,7 +268,7 @@ func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(etcdConfigManager, ShouldNotBeNil)
 
-		rabbitmqServiceConfigs, err := etcdConfigManager.FetchServiceConfigs("RABBITMQ", "5672")
+		rabbitmqServiceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(rabbitmqServiceConfigs, ShouldResemble, []*ServiceConfig{
 			&ServiceConfig{

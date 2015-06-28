@@ -24,7 +24,7 @@ type ServiceVariableKey struct {
 }
 
 type ConfigManager interface {
-	FetchServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error)
+	GetServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error)
 }
 
 const (
@@ -90,7 +90,7 @@ type ArrayConfigManager struct {
 	serviceVariableStrings []string
 }
 
-func (acm *ArrayConfigManager) FetchServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
+func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
 	serviceConfigsMap := map[string]*ServiceConfig{}
 
 	defaultUser := ""
@@ -190,7 +190,7 @@ type EtcdConfigManager struct {
 	client *etcd.Client
 }
 
-func (ecm *EtcdConfigManager) FetchServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
+func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
 	response, err := ecm.client.Get(serviceName+"/"+servicePort, false, true)
 	if err != nil {
 		return nil, err
