@@ -1,8 +1,10 @@
 package config
 
 import (
+	"encoding/json"
 	"errors"
 	"github.com/coreos/go-etcd/etcd"
+	"io"
 	"os"
 	"strings"
 )
@@ -87,6 +89,7 @@ func parseServiceVariableKeyString(serviceVariableKeyString string) (*ServiceVar
 			serviceIndex = serviceVariableKeyParts[1]
 			serviceIndexOffset = 1
 		default:
+			// Please note, that the PORT becomes the service name, kind of an odd quirk
 			serviceIndex = ""
 			serviceIndexOffset = -2
 		}
@@ -100,7 +103,7 @@ func parseServiceVariableKeyString(serviceVariableKeyString string) (*ServiceVar
 	}, nil
 }
 
-func setServiceConfigsDefaults(serviceConfigs map[string]*ServiceConfig, defaultServiceConfig *ServiceConfig) map[string]*ServiceConfig {
+func setServiceConfigsDefaults(serviceConfigs map[string]*ServiceConfig, defaultServiceConfig *ServiceConfig) (map[string]*ServiceConfig, error) {
 	if len(serviceConfigs) <= 0 {
 		return nil, NoServiceConfigs
 	}
@@ -117,7 +120,7 @@ func setServiceConfigsDefaults(serviceConfigs map[string]*ServiceConfig, default
 		}
 	}
 
-	return serviceConfigs
+	return serviceConfigs, nil
 }
 
 type ArrayConfigManager struct {
@@ -162,7 +165,7 @@ func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string
 		serviceConfigs[serviceVariableKey.Index].Set(serviceVariableKey.Key, value)
 	}
 
-	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig), nil
+	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig)
 }
 
 func NewArrayConfigManager(serviceVariableStrings []string) (*ArrayConfigManager, error) {
@@ -212,7 +215,7 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 		}
 	}
 
-	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig), nil
+	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig)
 }
 
 func NewEtcdConfigManager(serviceConfigs map[string]*ServiceConfig) (*EtcdConfigManager, error) {
@@ -229,4 +232,36 @@ func NewEtcdConfigManager(serviceConfigs map[string]*ServiceConfig) (*EtcdConfig
 	return &EtcdConfigManager{
 		client: etcd.NewClient(etcdEndpoints),
 	}, nil
+}
+
+type JsonConfigManager struct {
+	config map[string]map[string]map[string]*ServiceConfig // SERVICE, PORT, INDICES
+}
+
+func (jcm *JsonConfigManager) GetServiceConfigs(serviceName, servicePort string) (map[string]*ServiceConfig, error) {
+	servicePorts, exists := jcm.config[serviceName]
+	if !exists {
+		return nil, NoServiceConfigs
+	}
+
+	serviceConfigs, exists := servicePorts[servicePort]
+	if !exists {
+		return nil, NoServiceConfigs
+	}
+
+	return serviceConfigs, nil
+}
+
+func NewJsonConfigManager(r io.Reader) (*JsonConfigManager, error) {
+	if r == nil {
+		return nil, io.EOF
+	}
+
+	config := map[string]map[string]map[string]*ServiceConfig{}
+
+	if err := json.NewDecoder(r).Decode(&config); err != nil {
+		return nil, err
+	}
+
+	return &JsonConfigManager{config: config}, nil
 }
