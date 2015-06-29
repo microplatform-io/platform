@@ -208,9 +208,11 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		u, err := url.Parse(server.URL)
 		So(err, ShouldBeNil)
 
-		etcdConfigManager, err := NewEtcdConfigManager(&ServiceConfig{
-			Addr: strings.Split(u.Host, ":")[0],
-			Port: strings.Split(u.Host, ":")[1],
+		etcdConfigManager, err := NewEtcdConfigManager([]*ServiceConfig{
+			&ServiceConfig{
+				Addr: strings.Split(u.Host, ":")[0],
+				Port: strings.Split(u.Host, ":")[1],
+			},
 		})
 		So(err, ShouldBeNil)
 		So(etcdConfigManager, ShouldNotBeNil)
@@ -244,9 +246,11 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		u, err := url.Parse(server.URL)
 		So(err, ShouldBeNil)
 
-		etcdConfigManager, err := NewEtcdConfigManager(&ServiceConfig{
-			Addr: strings.Split(u.Host, ":")[0],
-			Port: strings.Split(u.Host, ":")[1],
+		etcdConfigManager, err := NewEtcdConfigManager([]*ServiceConfig{
+			&ServiceConfig{
+				Addr: strings.Split(u.Host, ":")[0],
+				Port: strings.Split(u.Host, ":")[1],
+			},
 		})
 		So(err, ShouldBeNil)
 		So(etcdConfigManager, ShouldNotBeNil)
@@ -288,9 +292,11 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		u, err := url.Parse(server.URL)
 		So(err, ShouldBeNil)
 
-		etcdConfigManager, err := NewEtcdConfigManager(&ServiceConfig{
-			Addr: strings.Split(u.Host, ":")[0],
-			Port: strings.Split(u.Host, ":")[1],
+		etcdConfigManager, err := NewEtcdConfigManager([]*ServiceConfig{
+			&ServiceConfig{
+				Addr: strings.Split(u.Host, ":")[0],
+				Port: strings.Split(u.Host, ":")[1],
+			},
 		})
 		So(err, ShouldBeNil)
 		So(etcdConfigManager, ShouldNotBeNil)
@@ -352,7 +358,7 @@ func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
 			},
 		})
 
-		etcdConfigManager, err := NewEtcdConfigManager(etcdServiceConfigs[0])
+		etcdConfigManager, err := NewEtcdConfigManager(etcdServiceConfigs)
 		So(err, ShouldBeNil)
 		So(etcdConfigManager, ShouldNotBeNil)
 

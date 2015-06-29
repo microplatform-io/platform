@@ -188,8 +188,6 @@ func getEtcdBasename(key string) string {
 }
 
 type EtcdConfigManager struct {
-	*ServiceConfig
-
 	client *etcd.Client
 }
 
@@ -238,15 +236,18 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 	return serviceConfigs, nil
 }
 
-func NewEtcdConfigManager(serviceConfig *ServiceConfig) (*EtcdConfigManager, error) {
-	if serviceConfig == nil {
-		return nil, errors.New("Invalid service config provded")
+func NewEtcdConfigManager(serviceConfigs []*ServiceConfig) (*EtcdConfigManager, error) {
+	if len(serviceConfigs) <= 0 {
+		return nil, errors.New("No service configs provided")
 	}
 
-	client := etcd.NewClient([]string{"http://" + serviceConfig.Addr + ":" + serviceConfig.Port})
+	etcdEndpoints := make([]string, len(serviceConfigs))
+
+	for i, serviceConfig := range serviceConfigs {
+		etcdEndpoints[i] = "http://" + serviceConfig.Addr + ":" + serviceConfig.Port
+	}
 
 	return &EtcdConfigManager{
-		ServiceConfig: serviceConfig,
-		client:        client,
+		client: etcd.NewClient(etcdEndpoints),
 	}, nil
 }
