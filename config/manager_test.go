@@ -32,13 +32,12 @@ func TestArrayConfigManager(t *testing.T) {
 		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(len(serviceConfigs), ShouldEqual, 1)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "",
-				Pass:  "",
-				Index: "1",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"1": &ServiceConfig{
+				User: "",
+				Pass: "",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
 		})
 	})
@@ -55,13 +54,12 @@ func TestArrayConfigManager(t *testing.T) {
 
 		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "",
-				Pass:  "",
-				Index: "1",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"1": &ServiceConfig{
+				User: "",
+				Pass: "",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
 		})
 	})
@@ -78,13 +76,12 @@ func TestArrayConfigManager(t *testing.T) {
 
 		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "1",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"1": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
 		})
 	})
@@ -104,20 +101,18 @@ func TestArrayConfigManager(t *testing.T) {
 		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(len(serviceConfigs), ShouldEqual, 2)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "1",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"1": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "2",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+			"2": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
 		})
 	})
@@ -135,20 +130,18 @@ func TestArrayConfigManager(t *testing.T) {
 		serviceConfigs, err := configManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
 		So(len(serviceConfigs), ShouldEqual, 2)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "",
-				Pass:  "",
-				Index: "1",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"1": &ServiceConfig{
+				User: "",
+				Pass: "",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
-			&ServiceConfig{
-				User:  "",
-				Pass:  "",
-				Index: "2",
-				Addr:  "127.0.0.2",
-				Port:  "5672",
+			"2": &ServiceConfig{
+				User: "",
+				Pass: "",
+				Addr: "127.0.0.2",
+				Port: "5672",
 			},
 		})
 	})
@@ -208,8 +201,8 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		u, err := url.Parse(server.URL)
 		So(err, ShouldBeNil)
 
-		etcdConfigManager, err := NewEtcdConfigManager([]*ServiceConfig{
-			&ServiceConfig{
+		etcdConfigManager, err := NewEtcdConfigManager(map[string]*ServiceConfig{
+			"1": &ServiceConfig{
 				Addr: strings.Split(u.Host, ":")[0],
 				Port: strings.Split(u.Host, ":")[1],
 			},
@@ -220,13 +213,12 @@ func TestNewEtcdConfigManager(t *testing.T) {
 
 		serviceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "123",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"123": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
 		})
 	})
@@ -246,8 +238,8 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		u, err := url.Parse(server.URL)
 		So(err, ShouldBeNil)
 
-		etcdConfigManager, err := NewEtcdConfigManager([]*ServiceConfig{
-			&ServiceConfig{
+		etcdConfigManager, err := NewEtcdConfigManager(map[string]*ServiceConfig{
+			"1": &ServiceConfig{
 				Addr: strings.Split(u.Host, ":")[0],
 				Port: strings.Split(u.Host, ":")[1],
 			},
@@ -259,20 +251,18 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		serviceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
 
 		So(err, ShouldBeNil)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "123",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"123": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "456",
-				Addr:  "127.0.0.2",
-				Port:  "5672",
+			"456": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.2",
+				Port: "5672",
 			},
 		})
 	})
@@ -292,8 +282,8 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		u, err := url.Parse(server.URL)
 		So(err, ShouldBeNil)
 
-		etcdConfigManager, err := NewEtcdConfigManager([]*ServiceConfig{
-			&ServiceConfig{
+		etcdConfigManager, err := NewEtcdConfigManager(map[string]*ServiceConfig{
+			"1": &ServiceConfig{
 				Addr: strings.Split(u.Host, ":")[0],
 				Port: strings.Split(u.Host, ":")[1],
 			},
@@ -305,20 +295,18 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		serviceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
 
 		So(err, ShouldBeNil)
-		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "override_user",
-				Pass:  "override_pass",
-				Index: "123",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(serviceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"123": &ServiceConfig{
+				User: "override_user",
+				Pass: "override_pass",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "456",
-				Addr:  "127.0.0.2",
-				Port:  "5672",
+			"456": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.2",
+				Port: "5672",
 			},
 		})
 	})
@@ -350,11 +338,12 @@ func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
 
 		etcdServiceConfigs, err := arrayConfigManager.GetServiceConfigs("ETCD", "4001")
 		So(err, ShouldBeNil)
-		So(etcdServiceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				Index: "1",
-				Addr:  etcdAddr,
-				Port:  etcdPort,
+		So(etcdServiceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"1": &ServiceConfig{
+				User: "",
+				Pass: "",
+				Addr: etcdAddr,
+				Port: etcdPort,
 			},
 		})
 
@@ -364,13 +353,12 @@ func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
 
 		rabbitmqServiceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
 		So(err, ShouldBeNil)
-		So(rabbitmqServiceConfigs, ShouldResemble, []*ServiceConfig{
-			&ServiceConfig{
-				User:  "user",
-				Pass:  "pass",
-				Index: "123",
-				Addr:  "127.0.0.1",
-				Port:  "5672",
+		So(rabbitmqServiceConfigs, ShouldResemble, map[string]*ServiceConfig{
+			"123": &ServiceConfig{
+				User: "user",
+				Pass: "pass",
+				Addr: "127.0.0.1",
+				Port: "5672",
 			},
 		})
 	})

@@ -8,12 +8,10 @@ import (
 )
 
 type ServiceConfig struct {
-	User  string
-	Pass  string
-	Index string
-	Addr  string
-	Port  string
-	Extra map[string]string
+	User string
+	Pass string
+	Addr string
+	Port string
 }
 
 func (sc *ServiceConfig) Set(key, value string) {
@@ -40,7 +38,7 @@ type ServiceVariableKey struct {
 }
 
 type ConfigManager interface {
-	GetServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error)
+	GetServiceConfigs(serviceName, servicePort string) (map[string]*ServiceConfig, error)
 }
 
 const (
@@ -102,7 +100,7 @@ func parseServiceVariableKeyString(serviceVariableKeyString string) (*ServiceVar
 	}, nil
 }
 
-func setServiceConfigsDefaults(serviceConfigs []*ServiceConfig, defaultServiceConfig *ServiceConfig) []*ServiceConfig {
+func setServiceConfigsDefaults(serviceConfigs map[string]*ServiceConfig, defaultServiceConfig *ServiceConfig) map[string]*ServiceConfig {
 	if defaultServiceConfig != nil {
 		for _, serviceConfig := range serviceConfigs {
 			if serviceConfig.User == "" {
@@ -122,10 +120,9 @@ type ArrayConfigManager struct {
 	serviceVariableStrings []string
 }
 
-func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
-	serviceConfigsMap := map[string]*ServiceConfig{}
-
+func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string) (map[string]*ServiceConfig, error) {
 	defaultServiceConfig := &ServiceConfig{}
+	serviceConfigs := map[string]*ServiceConfig{}
 
 	for _, serviceVariableString := range acm.serviceVariableStrings {
 		keyValueParts := strings.SplitN(serviceVariableString, "=", 2)
@@ -154,20 +151,11 @@ func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string
 			continue
 		}
 
-		serviceConfig, exists := serviceConfigsMap[serviceVariableKey.Index]
-		if !exists {
-			serviceConfig = &ServiceConfig{
-				Index: serviceVariableKey.Index,
-			}
-			serviceConfigsMap[serviceVariableKey.Index] = serviceConfig
+		if _, exists := serviceConfigs[serviceVariableKey.Index]; !exists {
+			serviceConfigs[serviceVariableKey.Index] = &ServiceConfig{}
 		}
 
-		serviceConfig.Set(serviceVariableKey.Key, value)
-	}
-
-	serviceConfigs := []*ServiceConfig{}
-	for _, serviceConfig := range serviceConfigsMap {
-		serviceConfigs = append(serviceConfigs, serviceConfig)
+		serviceConfigs[serviceVariableKey.Index].Set(serviceVariableKey.Key, value)
 	}
 
 	if len(serviceConfigs) <= 0 {
@@ -197,48 +185,49 @@ type EtcdConfigManager struct {
 	client *etcd.Client
 }
 
-func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
+func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string) (map[string]*ServiceConfig, error) {
 	response, err := ecm.client.Get(serviceName+"/"+servicePort, false, true)
 	if err != nil {
 		return nil, err
 	}
 
 	defaultServiceConfig := &ServiceConfig{}
-	serviceConfigs := []*ServiceConfig{}
+	serviceConfigs := map[string]*ServiceConfig{}
 
 	for _, serviceRootNode := range response.Node.Nodes {
-		baseIndex := strings.ToUpper(getEtcdBasename(serviceRootNode.Key))
+		baseIndex := getEtcdBasename(serviceRootNode.Key)
 
-		switch baseIndex {
+		switch strings.ToUpper(baseIndex) {
 		case SERVICE_VARIABLE_KEY_USER:
 			defaultServiceConfig.User = serviceRootNode.Value
 		case SERVICE_VARIABLE_KEY_PASS:
 			defaultServiceConfig.Pass = serviceRootNode.Value
 		default:
-			serviceConfig := &ServiceConfig{
-				Index: baseIndex,
-			}
-
+			serviceConfig := &ServiceConfig{}
 			for _, serviceAttrNode := range serviceRootNode.Nodes {
 				serviceConfig.Set(getEtcdBasename(serviceAttrNode.Key), serviceAttrNode.Value)
 			}
 
-			serviceConfigs = append(serviceConfigs, serviceConfig)
+			serviceConfigs[baseIndex] = serviceConfig
 		}
+	}
+
+	if len(serviceConfigs) <= 0 {
+		return nil, NoServiceConfigs
 	}
 
 	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig), nil
 }
 
-func NewEtcdConfigManager(serviceConfigs []*ServiceConfig) (*EtcdConfigManager, error) {
+func NewEtcdConfigManager(serviceConfigs map[string]*ServiceConfig) (*EtcdConfigManager, error) {
 	if len(serviceConfigs) <= 0 {
 		return nil, errors.New("No service configs provided")
 	}
 
-	etcdEndpoints := make([]string, len(serviceConfigs))
+	etcdEndpoints := []string{}
 
-	for i, serviceConfig := range serviceConfigs {
-		etcdEndpoints[i] = "http://" + serviceConfig.Addr + ":" + serviceConfig.Port
+	for _, serviceConfig := range serviceConfigs {
+		etcdEndpoints = append(etcdEndpoints, "http://"+serviceConfig.Addr+":"+serviceConfig.Port)
 	}
 
 	return &EtcdConfigManager{
