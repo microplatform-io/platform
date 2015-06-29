@@ -102,6 +102,22 @@ func parseServiceVariableKeyString(serviceVariableKeyString string) (*ServiceVar
 	}, nil
 }
 
+func setServiceConfigsDefaults(serviceConfigs []*ServiceConfig, defaultServiceConfig *ServiceConfig) []*ServiceConfig {
+	if defaultServiceConfig != nil {
+		for _, serviceConfig := range serviceConfigs {
+			if serviceConfig.User == "" {
+				serviceConfig.User = defaultServiceConfig.User
+			}
+
+			if serviceConfig.Pass == "" {
+				serviceConfig.Pass = defaultServiceConfig.Pass
+			}
+		}
+	}
+
+	return serviceConfigs
+}
+
 type ArrayConfigManager struct {
 	serviceVariableStrings []string
 }
@@ -109,8 +125,7 @@ type ArrayConfigManager struct {
 func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string) ([]*ServiceConfig, error) {
 	serviceConfigsMap := map[string]*ServiceConfig{}
 
-	defaultUser := ""
-	defaultPass := ""
+	defaultServiceConfig := &ServiceConfig{}
 
 	for _, serviceVariableString := range acm.serviceVariableStrings {
 		keyValueParts := strings.SplitN(serviceVariableString, "=", 2)
@@ -126,17 +141,16 @@ func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string
 		if serviceVariableKey.Index == "" {
 			switch serviceVariableKey.Key {
 			case SERVICE_VARIABLE_KEY_USER:
-				defaultUser = value
+				defaultServiceConfig.User = value
+				continue
+
 			case SERVICE_VARIABLE_KEY_PASS:
-				defaultPass = value
+				defaultServiceConfig.Pass = value
+				continue
 			}
 		}
 
-		if serviceVariableKey.Name != serviceName {
-			continue
-		}
-
-		if serviceVariableKey.Port != servicePort {
+		if serviceVariableKey.Name != serviceName || serviceVariableKey.Port != servicePort {
 			continue
 		}
 
@@ -153,14 +167,6 @@ func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string
 
 	serviceConfigs := []*ServiceConfig{}
 	for _, serviceConfig := range serviceConfigsMap {
-		if serviceConfig.User == "" {
-			serviceConfig.User = defaultUser
-		}
-
-		if serviceConfig.Pass == "" {
-			serviceConfig.Pass = defaultPass
-		}
-
 		serviceConfigs = append(serviceConfigs, serviceConfig)
 	}
 
@@ -168,7 +174,7 @@ func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string
 		return nil, NoServiceConfigs
 	}
 
-	return serviceConfigs, nil
+	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig), nil
 }
 
 func NewArrayConfigManager(serviceVariableStrings []string) (*ArrayConfigManager, error) {
@@ -197,9 +203,7 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 		return nil, err
 	}
 
-	defaultUser := ""
-	defaultPass := ""
-
+	defaultServiceConfig := &ServiceConfig{}
 	serviceConfigs := []*ServiceConfig{}
 
 	for _, serviceRootNode := range response.Node.Nodes {
@@ -207,9 +211,9 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 
 		switch baseIndex {
 		case SERVICE_VARIABLE_KEY_USER:
-			defaultUser = serviceRootNode.Value
+			defaultServiceConfig.User = serviceRootNode.Value
 		case SERVICE_VARIABLE_KEY_PASS:
-			defaultPass = serviceRootNode.Value
+			defaultServiceConfig.Pass = serviceRootNode.Value
 		default:
 			serviceConfig := &ServiceConfig{
 				Index: baseIndex,
@@ -223,17 +227,7 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 		}
 	}
 
-	for _, serviceConfig := range serviceConfigs {
-		if serviceConfig.User == "" {
-			serviceConfig.User = defaultUser
-		}
-
-		if serviceConfig.Pass == "" {
-			serviceConfig.Pass = defaultPass
-		}
-	}
-
-	return serviceConfigs, nil
+	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig), nil
 }
 
 func NewEtcdConfigManager(serviceConfigs []*ServiceConfig) (*EtcdConfigManager, error) {
