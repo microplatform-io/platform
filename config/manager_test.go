@@ -228,6 +228,94 @@ func TestNewEtcdConfigManager(t *testing.T) {
 			},
 		})
 	})
+
+	Convey("Validate that global user and pass get set on every child", t, func() {
+		mux := http.NewServeMux()
+		mux.Handle("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, "etcd 0.4.6")
+		}))
+		mux.Handle("/v2/keys/RABBITMQ/5672", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":7,"createdIndex":7},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":8,"createdIndex":8}],"modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/pass","value":"pass","modifiedIndex":5,"createdIndex":5},{"key":"/RABBITMQ/5672/user","value":"user","modifiedIndex":6,"createdIndex":6},{"key":"/RABBITMQ/5672/456","dir":true,"nodes":[{"key":"/RABBITMQ/5672/456/tcp_addr","value":"127.0.0.2","modifiedIndex":11,"createdIndex":11},{"key":"/RABBITMQ/5672/456/tcp_port","value":"5672","modifiedIndex":12,"createdIndex":12}],"modifiedIndex":11,"createdIndex":11}],"modifiedIndex":3,"createdIndex":3}}`)
+		}))
+
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		So(err, ShouldBeNil)
+
+		etcdConfigManager, err := NewEtcdConfigManager(&ServiceConfig{
+			Addr: strings.Split(u.Host, ":")[0],
+			Port: strings.Split(u.Host, ":")[1],
+		})
+		So(err, ShouldBeNil)
+		So(etcdConfigManager, ShouldNotBeNil)
+		So(etcdConfigManager.client, ShouldNotBeNil)
+
+		serviceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
+
+		So(err, ShouldBeNil)
+		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
+			&ServiceConfig{
+				User:  "user",
+				Pass:  "pass",
+				Index: "123",
+				Addr:  "127.0.0.1",
+				Port:  "5672",
+			},
+			&ServiceConfig{
+				User:  "user",
+				Pass:  "pass",
+				Index: "456",
+				Addr:  "127.0.0.2",
+				Port:  "5672",
+			},
+		})
+	})
+
+	Convey("Validate that local user and pass can override global user and pass set on every child", t, func() {
+		mux := http.NewServeMux()
+		mux.Handle("/version", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, "etcd 0.4.6")
+		}))
+		mux.Handle("/v2/keys/RABBITMQ/5672", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":7,"createdIndex":7},{"key":"/RABBITMQ/5672/123/user","value":"override_user","modifiedIndex":7,"createdIndex":7},{"key":"/RABBITMQ/5672/123/pass","value":"override_pass","modifiedIndex":7,"createdIndex":7},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":8,"createdIndex":8}],"modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/pass","value":"pass","modifiedIndex":5,"createdIndex":5},{"key":"/RABBITMQ/5672/user","value":"user","modifiedIndex":6,"createdIndex":6},{"key":"/RABBITMQ/5672/456","dir":true,"nodes":[{"key":"/RABBITMQ/5672/456/tcp_addr","value":"127.0.0.2","modifiedIndex":11,"createdIndex":11},{"key":"/RABBITMQ/5672/456/tcp_port","value":"5672","modifiedIndex":12,"createdIndex":12}],"modifiedIndex":11,"createdIndex":11}],"modifiedIndex":3,"createdIndex":3}}`)
+		}))
+
+		server := httptest.NewServer(mux)
+		defer server.Close()
+
+		u, err := url.Parse(server.URL)
+		So(err, ShouldBeNil)
+
+		etcdConfigManager, err := NewEtcdConfigManager(&ServiceConfig{
+			Addr: strings.Split(u.Host, ":")[0],
+			Port: strings.Split(u.Host, ":")[1],
+		})
+		So(err, ShouldBeNil)
+		So(etcdConfigManager, ShouldNotBeNil)
+		So(etcdConfigManager.client, ShouldNotBeNil)
+
+		serviceConfigs, err := etcdConfigManager.GetServiceConfigs("RABBITMQ", "5672")
+
+		So(err, ShouldBeNil)
+		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
+			&ServiceConfig{
+				User:  "override_user",
+				Pass:  "override_pass",
+				Index: "123",
+				Addr:  "127.0.0.1",
+				Port:  "5672",
+			},
+			&ServiceConfig{
+				User:  "user",
+				Pass:  "pass",
+				Index: "456",
+				Addr:  "127.0.0.2",
+				Port:  "5672",
+			},
+		})
+	})
 }
 
 func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {

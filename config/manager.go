@@ -199,18 +199,40 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 		return nil, err
 	}
 
+	defaultUser := ""
+	defaultPass := ""
+
 	serviceConfigs := []*ServiceConfig{}
 
 	for _, serviceRootNode := range response.Node.Nodes {
-		serviceConfig := &ServiceConfig{
-			Index: getEtcdBasename(serviceRootNode.Key),
+		baseIndex := strings.ToUpper(getEtcdBasename(serviceRootNode.Key))
+
+		switch baseIndex {
+		case SERVICE_VARIABLE_KEY_USER:
+			defaultUser = serviceRootNode.Value
+		case SERVICE_VARIABLE_KEY_PASS:
+			defaultPass = serviceRootNode.Value
+		default:
+			serviceConfig := &ServiceConfig{
+				Index: baseIndex,
+			}
+
+			for _, serviceAttrNode := range serviceRootNode.Nodes {
+				serviceConfig.Set(getEtcdBasename(serviceAttrNode.Key), serviceAttrNode.Value)
+			}
+
+			serviceConfigs = append(serviceConfigs, serviceConfig)
+		}
+	}
+
+	for _, serviceConfig := range serviceConfigs {
+		if serviceConfig.User == "" {
+			serviceConfig.User = defaultUser
 		}
 
-		for _, serviceAttrNode := range serviceRootNode.Nodes {
-			serviceConfig.Set(getEtcdBasename(serviceAttrNode.Key), serviceAttrNode.Value)
+		if serviceConfig.Pass == "" {
+			serviceConfig.Pass = defaultPass
 		}
-
-		serviceConfigs = append(serviceConfigs, serviceConfig)
 	}
 
 	return serviceConfigs, nil
