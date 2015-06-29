@@ -199,7 +199,7 @@ func TestNewEtcdConfigManager(t *testing.T) {
 			fmt.Fprint(w, "etcd 0.4.6")
 		}))
 		mux.Handle("/v2/keys/RABBITMQ/5672", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":4,"createdIndex":4}],"modifiedIndex":3,"createdIndex":3}],"modifiedIndex":3,"createdIndex":3}}`)
+			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/user","value":"user","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/pass","value":"pass","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":4,"createdIndex":4}],"modifiedIndex":3,"createdIndex":3}],"modifiedIndex":3,"createdIndex":3}}`)
 		}))
 
 		server := httptest.NewServer(mux)
@@ -220,8 +220,8 @@ func TestNewEtcdConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(serviceConfigs, ShouldResemble, []*ServiceConfig{
 			&ServiceConfig{
-				User:  "",
-				Pass:  "",
+				User:  "user",
+				Pass:  "pass",
 				Index: "123",
 				Addr:  "127.0.0.1",
 				Port:  "5672",
@@ -237,7 +237,7 @@ func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
 			fmt.Fprint(w, "etcd 0.4.6")
 		}))
 		mux.Handle("/v2/keys/RABBITMQ/5672", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":4,"createdIndex":4}],"modifiedIndex":3,"createdIndex":3}],"modifiedIndex":3,"createdIndex":3}}`)
+			fmt.Fprint(w, `{"action":"get","node":{"key":"/RABBITMQ/5672","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123","dir":true,"nodes":[{"key":"/RABBITMQ/5672/123/user","value":"user","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/pass","value":"pass","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_addr","value":"127.0.0.1","modifiedIndex":3,"createdIndex":3},{"key":"/RABBITMQ/5672/123/tcp_port","value":"5672","modifiedIndex":4,"createdIndex":4}],"modifiedIndex":3,"createdIndex":3}],"modifiedIndex":3,"createdIndex":3}}`)
 		}))
 
 		server := httptest.NewServer(mux)
@@ -272,8 +272,8 @@ func TestEtcdConfigManagerFromArrayConfigManager(t *testing.T) {
 		So(err, ShouldBeNil)
 		So(rabbitmqServiceConfigs, ShouldResemble, []*ServiceConfig{
 			&ServiceConfig{
-				User:  "",
-				Pass:  "",
+				User:  "user",
+				Pass:  "pass",
 				Index: "123",
 				Addr:  "127.0.0.1",
 				Port:  "5672",
