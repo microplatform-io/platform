@@ -101,6 +101,10 @@ func parseServiceVariableKeyString(serviceVariableKeyString string) (*ServiceVar
 }
 
 func setServiceConfigsDefaults(serviceConfigs map[string]*ServiceConfig, defaultServiceConfig *ServiceConfig) map[string]*ServiceConfig {
+	if len(serviceConfigs) <= 0 {
+		return nil, NoServiceConfigs
+	}
+
 	if defaultServiceConfig != nil {
 		for _, serviceConfig := range serviceConfigs {
 			if serviceConfig.User == "" {
@@ -158,10 +162,6 @@ func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string
 		serviceConfigs[serviceVariableKey.Index].Set(serviceVariableKey.Key, value)
 	}
 
-	if len(serviceConfigs) <= 0 {
-		return nil, NoServiceConfigs
-	}
-
 	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig), nil
 }
 
@@ -210,10 +210,6 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 
 			serviceConfigs[baseIndex] = serviceConfig
 		}
-	}
-
-	if len(serviceConfigs) <= 0 {
-		return nil, NoServiceConfigs
 	}
 
 	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig), nil
