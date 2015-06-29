@@ -16,6 +16,22 @@ type ServiceConfig struct {
 	Extra map[string]string
 }
 
+func (sc *ServiceConfig) Set(key, value string) {
+	switch strings.ToUpper(key) {
+	case SERVICE_VARIABLE_KEY_USER:
+		sc.User = value
+
+	case SERVICE_VARIABLE_KEY_PASS:
+		sc.Pass = value
+
+	case SERVICE_VARIABLE_KEY_ADDR:
+		sc.Addr = value
+
+	case SERVICE_VARIABLE_KEY_PORT:
+		sc.Port = value
+	}
+}
+
 type ServiceVariableKey struct {
 	Name  string
 	Index string
@@ -132,20 +148,7 @@ func (acm *ArrayConfigManager) GetServiceConfigs(serviceName, servicePort string
 			serviceConfigsMap[serviceVariableKey.Index] = serviceConfig
 		}
 
-		switch serviceVariableKey.Key {
-		case SERVICE_VARIABLE_KEY_USER:
-			serviceConfig.User = value
-
-		case SERVICE_VARIABLE_KEY_PASS:
-			serviceConfig.Pass = value
-
-		case SERVICE_VARIABLE_KEY_ADDR:
-			serviceConfig.Addr = value
-
-		case SERVICE_VARIABLE_KEY_PORT:
-			serviceConfig.Port = value
-
-		}
+		serviceConfig.Set(serviceVariableKey.Key, value)
 	}
 
 	serviceConfigs := []*ServiceConfig{}
@@ -204,12 +207,7 @@ func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string)
 		}
 
 		for _, serviceAttrNode := range serviceRootNode.Nodes {
-			switch strings.ToUpper(getEtcdBasename(serviceAttrNode.Key)) {
-			case SERVICE_VARIABLE_KEY_ADDR:
-				serviceConfig.Addr = serviceAttrNode.Value
-			case SERVICE_VARIABLE_KEY_PORT:
-				serviceConfig.Port = serviceAttrNode.Value
-			}
+			serviceConfig.Set(getEtcdBasename(serviceAttrNode.Key), serviceAttrNode.Value)
 		}
 
 		serviceConfigs = append(serviceConfigs, serviceConfig)
