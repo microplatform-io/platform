@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 )
 
 type ServiceConfig struct {
@@ -235,10 +236,14 @@ func NewEtcdConfigManager(serviceConfigs map[string]*ServiceConfig) (*EtcdConfig
 }
 
 type JsonConfigManager struct {
+	mu     *sync.Mutex
 	config map[string]map[string]map[string]*ServiceConfig // SERVICE, PORT, INDICES
 }
 
 func (jcm *JsonConfigManager) GetServiceConfigs(serviceName, servicePort string) (map[string]*ServiceConfig, error) {
+	jcm.mu.Lock()
+	defer jcm.mu.Unlock()
+
 	servicePorts, exists := jcm.config[serviceName]
 	if !exists {
 		return nil, NoServiceConfigs
@@ -263,5 +268,5 @@ func NewJsonConfigManager(r io.Reader) (*JsonConfigManager, error) {
 		return nil, err
 	}
 
-	return &JsonConfigManager{config: config}, nil
+	return &JsonConfigManager{mu: &sync.Mutex{}, config: config}, nil
 }
