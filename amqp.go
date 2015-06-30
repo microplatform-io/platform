@@ -213,18 +213,7 @@ func (s *AmqpSubscriber) run() error {
 
 				case <-time.After(500 * time.Millisecond):
 					// ignore
-
 				}
-				/* if err := subscription.Handler.HandleMessage(msg.Body); err != nil {
-					// If this message has already been redelivered once, just ack it to discard it
-					if msg.Redelivered {
-						msg.Ack(true)
-					} else {
-						msg.Reject(true)
-					}
-				} else {
-					msg.Ack(true)
-				} */
 			}
 		}
 
