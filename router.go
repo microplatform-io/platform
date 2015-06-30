@@ -7,6 +7,10 @@ import (
 	"time"
 )
 
+const (
+	MAX_CONCURRENCY = 20
+)
+
 type Router interface {
 	Route(routedMessage *RoutedMessage, expires time.Duration) (*RoutedMessage, error)
 }
@@ -98,7 +102,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 		router.mu.Unlock()
 
 		return nil
-	}))
+	}), MAX_CONCURRENCY)
 
 	go func() {
 		for i := 0; i <= 100; i++ {

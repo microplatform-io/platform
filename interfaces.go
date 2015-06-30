@@ -16,7 +16,7 @@ func (handlerFunc HandlerFunc) HandleRoutedMessage(cloudMessage *RoutedMessage) 
 
 type Subscriber interface {
 	Run() error
-	Subscribe(topic string, handler ConsumerHandler)
+	Subscribe(topic string, handler ConsumerHandler, concurrency int)
 }
 
 type Publisher interface {

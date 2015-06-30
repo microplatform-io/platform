@@ -17,15 +17,15 @@ type Service struct {
 	subscriber Subscriber
 }
 
-func (s *Service) AddHandler(method, resource interface{}, handler Handler) {
-	s.AddTopicHandler(fmt.Sprintf("%d_%d", method, resource), handler)
+func (s *Service) AddHandler(method, resource interface{}, handler Handler, concurrency int) {
+	s.AddTopicHandler(fmt.Sprintf("%d_%d", method, resource), handler, concurrency)
 }
 
-func (s *Service) AddListener(topic string, handler ConsumerHandler) {
-	s.subscriber.Subscribe(topic, handler)
+func (s *Service) AddListener(topic string, handler ConsumerHandler, concurrency int) {
+	s.subscriber.Subscribe(topic, handler, concurrency)
 }
 
-func (s *Service) AddTopicHandler(topic string, handler Handler) {
+func (s *Service) AddTopicHandler(topic string, handler Handler, concurrency int) {
 	logger.Println("> adding topic handler", topic)
 
 	s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(p []byte) error {
@@ -52,7 +52,7 @@ func (s *Service) AddTopicHandler(topic string, handler Handler) {
 		}
 
 		return s.publisher.Publish(request.GetReplyTopic(), payload)
-	}))
+	}), concurrency)
 }
 
 func (s *Service) Run() {

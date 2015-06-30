@@ -10,10 +10,32 @@ import (
 )
 
 const PUBLISH_RETRIES = 3
+const MAX_WORKERS = 20
 
 type AmqpPublisher struct {
 	connectionManager *AmqpConnectionManager
 	channel           *amqp.Channel
+}
+
+func subscriptionWorker(subscription *subscription, workQueue chan amqp.Delivery) {
+	for {
+		for work := range workQueue {
+			subscriberDoWork(subscription, work)
+		}
+	}
+}
+
+func subscriberDoWork(subscription *subscription, msg amqp.Delivery) {
+	if err := subscription.Handler.HandleMessage(msg.Body); err != nil {
+		// If this message has already been redelivered once, just ack it to discard it
+		if msg.Redelivered {
+			msg.Ack(true)
+		} else {
+			msg.Reject(true)
+		}
+	} else {
+		msg.Ack(true)
+	}
 }
 
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
@@ -106,8 +128,10 @@ func NewMultiPublisher(publishers ...Publisher) Publisher {
 }
 
 type subscription struct {
-	Topic   string
-	Handler ConsumerHandler
+	Topic       string
+	Handler     ConsumerHandler
+	Concurrency int
+	workQueue   chan amqp.Delivery
 }
 
 type AmqpSubscriber struct {
@@ -155,6 +179,12 @@ func (s *AmqpSubscriber) run() error {
 		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", false, nil); err != nil {
 			return err
 		}
+
+		subscription.workQueue = make(chan amqp.Delivery)
+
+		for i := 0; i <= subscription.Concurrency; i++ {
+			go subscriptionWorker(subscription, subscription.workQueue)
+		}
 	}
 
 	msgs, err := ch.Consume(
@@ -171,13 +201,21 @@ func (s *AmqpSubscriber) run() error {
 	}
 
 	for msg := range msgs {
+
 		handled := false
 
 		for _, subscription := range s.subscriptions {
 			if subscription.Topic == "" || (subscription.Topic == msg.RoutingKey) {
-				handled = true
 
-				if err := subscription.Handler.HandleMessage(msg.Body); err != nil {
+				select {
+				case subscription.workQueue <- msg:
+					handled = true
+
+				case <-time.After(500 * time.Millisecond):
+					// ignore
+
+				}
+				/* if err := subscription.Handler.HandleMessage(msg.Body); err != nil {
 					// If this message has already been redelivered once, just ack it to discard it
 					if msg.Redelivered {
 						msg.Ack(true)
@@ -186,7 +224,7 @@ func (s *AmqpSubscriber) run() error {
 					}
 				} else {
 					msg.Ack(true)
-				}
+				} */
 			}
 		}
 
@@ -198,10 +236,11 @@ func (s *AmqpSubscriber) run() error {
 	return errors.New("connection has been closed")
 }
 
-func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) {
+func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler, concurrency int) {
 	s.subscriptions = append(s.subscriptions, &subscription{
-		Topic:   topic,
-		Handler: handler,
+		Topic:       topic,
+		Handler:     handler,
+		Concurrency: concurrency,
 	})
 }
 
@@ -232,9 +271,9 @@ func (s *MultiSubscriber) Run() error {
 	return nil
 }
 
-func (s *MultiSubscriber) Subscribe(topic string, handler ConsumerHandler) {
+func (s *MultiSubscriber) Subscribe(topic string, handler ConsumerHandler, concurrency int) {
 	for _, subscriber := range s.subscribers {
-		subscriber.Subscribe(topic, handler)
+		subscriber.Subscribe(topic, handler, concurrency)
 	}
 }
 
