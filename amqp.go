@@ -15,6 +15,7 @@ const MAX_WORKERS = 20
 type AmqpPublisher struct {
 	connectionManager *AmqpConnectionManager
 	channel           *amqp.Channel
+	exchange          string
 }
 
 func subscriptionWorker(subscription *subscription, workQueue chan amqp.Delivery) {
@@ -51,10 +52,10 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 
 	for i := 0; i < PUBLISH_RETRIES; i++ {
 		publishErr = p.channel.Publish(
-			"amq.topic", // exchange
-			topic,       // routing key
-			false,       // mandatory
-			false,       // immediate
+			p.exchange, // exchange
+			topic,      // routing key
+			false,      // mandatory
+			false,      // immediate
 			amqp.Publishing{
 				ContentType: "text/plain",
 				Body:        body,
@@ -90,7 +91,17 @@ func (p *AmqpPublisher) resetChannel() error {
 }
 
 func NewAmqpPublisher(connectionManager *AmqpConnectionManager) (*AmqpPublisher, error) {
-	return &AmqpPublisher{connectionManager: connectionManager}, nil
+	return &AmqpPublisher{
+		connectionManager: connectionManager,
+		exchange:          "amq.topic",
+	}, nil
+}
+
+func NewCustomAmqpPublisher(connectionManager *AmqpConnectionManager, exchange string) (*AmqpPublisher, error) {
+	return &AmqpPublisher{
+		connectionManager: connectionManager,
+		exchange:          exchange,
+	}, nil
 }
 
 type MultiPublisher struct {
@@ -134,10 +145,24 @@ type subscription struct {
 	workQueue   chan amqp.Delivery
 }
 
+type AmqpQueue struct {
+	Name             string
+	Durable          bool
+	DeleteWhenUnused bool
+}
+
+type AmqpExchange struct {
+	Name         string
+	ExchangeType string
+}
+
 type AmqpSubscriber struct {
 	connectionManager *AmqpConnectionManager
-	queue             string
 	subscriptions     []*subscription
+	tag               string
+	declareExchange   bool
+	exchange          *AmqpExchange
+	queue             *AmqpQueue
 }
 
 func (s *AmqpSubscriber) Run() error {
@@ -168,15 +193,47 @@ func (s *AmqpSubscriber) run() error {
 	}
 	defer ch.Close()
 
+	if s.declareExchange {
+		logger.Printf("> AmqpSubscriber.run: got Channel, declaring Exchange (%q)", s.exchange)
+		if err = ch.ExchangeDeclare(
+			s.exchange.Name,         // name of the exchange
+			s.exchange.ExchangeType, // type
+			true,  // durable
+			false, // delete when complete
+			false, // internal
+			false, // noWait
+			nil,   // arguments
+		); err != nil {
+			logger.Printf("> Err declaring exchange: %s", err)
+			return err
+		}
+	}
+
 	logger.Printf("> AmqpSubscriber.run: got channel: %s", conn)
 
-	if _, err := ch.QueueDeclare(s.queue, false, true, false, false, nil); err != nil {
+	logger.Printf("> AmqpSubscriber.run: declared Exchange, declaring Queue %q", s.queue)
+	qu := amqp.Queue{}
+	if qu, err = ch.QueueDeclare(
+		s.queue.Name,
+		s.queue.Durable,
+		s.queue.DeleteWhenUnused,
+		false,
+		false,
+		nil,
+	); err != nil {
 		return err
 	}
 
 	for _, subscription := range s.subscriptions {
-		logger.Println("> binding subscription")
-		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", false, nil); err != nil {
+		logger.Printf("> AmqpSubscriber.run: declared Queue (%q %d messages, %d consumers), binding to Exchange (key %q)",
+			s.queue, qu.Messages, qu.Consumers, subscription.Topic)
+		if err := ch.QueueBind(
+			s.queue.Name,
+			subscription.Topic,
+			s.exchange.Name,
+			false,
+			nil,
+		); err != nil {
 			return err
 		}
 
@@ -187,14 +244,15 @@ func (s *AmqpSubscriber) run() error {
 		}
 	}
 
+	logger.Printf("> consuming: %s, %s", s.queue, s.tag)
 	msgs, err := ch.Consume(
-		s.queue, // queue
-		"",      // consumer defined by server
-		false,   // auto-ack
-		false,   // exclusive
-		false,   // no-local
-		false,   // no-wait
-		nil,     // args
+		s.queue.Name, // queue
+		s.tag,        // consumer defined by server
+		false,        // auto-ack
+		false,        // exclusive
+		false,        // no-local
+		false,        // no-wait
+		nil,          // args
 	)
 	if err != nil {
 		return err
@@ -203,17 +261,15 @@ func (s *AmqpSubscriber) run() error {
 	for msg := range msgs {
 
 		handled := false
-
 		for _, subscription := range s.subscriptions {
 			if subscription.Topic == "" || (subscription.Topic == msg.RoutingKey) {
-
 				select {
 				case subscription.workQueue <- msg:
 					handled = true
 
 				case <-time.After(500 * time.Millisecond):
-					// ignore
 				}
+
 			}
 		}
 
@@ -233,10 +289,30 @@ func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler, concur
 	})
 }
 
-func NewAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (*AmqpSubscriber, error) {
+func NewAmqpSubscriber(connectionManager *AmqpConnectionManager, queueName string) (*AmqpSubscriber, error) {
+	return &AmqpSubscriber{
+		connectionManager: connectionManager,
+		queue: &AmqpQueue{
+			Name:             queueName,
+			Durable:          false,
+			DeleteWhenUnused: true,
+		},
+		exchange: &AmqpExchange{
+			Name:         "amq.topic",
+			ExchangeType: "",
+		},
+		tag:             "",
+		declareExchange: false,
+	}, nil
+}
+
+func NewCustomAmqpSubscriber(connectionManager *AmqpConnectionManager, queue *AmqpQueue, exchange *AmqpExchange, tag string) (*AmqpSubscriber, error) {
 	return &AmqpSubscriber{
 		connectionManager: connectionManager,
 		queue:             queue,
+		exchange:          exchange,
+		tag:               tag,
+		declareExchange:   true,
 	}, nil
 }
 
