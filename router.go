@@ -93,13 +93,20 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 			return nil
 		}
 
-		logger.Printf("> receiving message for router: %s", routedMessage)
+		logger.Printf("> received message for router: %s", routedMessage)
 
 		router.mu.Lock()
 		if replyChan, exists := router.pendingRequests[routedMessage.GetId()]; exists {
-			replyChan <- routedMessage
+			select {
+			case replyChan <- routedMessage:
+				logger.Println("> reply chan was available")
+			default:
+				logger.Println("> reply chan was not available")
+			}
 		}
 		router.mu.Unlock()
+
+		logger.Printf("> completed message for router: %s", routedMessage)
 
 		return nil
 	}), MAX_CONCURRENCY)
