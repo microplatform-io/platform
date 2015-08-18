@@ -52,6 +52,8 @@ func (sr *StandardRouter) Route(msg *RoutedMessage, timeout time.Duration) (*Rou
 	case response = <-responseChan:
 		// Good to proceed
 	case <-time.After(timeout):
+		logger.Printf("request.timeout under Resource : %d, Method : %d\n", msg.GetResource(), msg.GetMethod())
+
 		// Emit a request timeout to any microservice that is interested
 		sr.publisher.Publish("request.timeout", payload)
 
