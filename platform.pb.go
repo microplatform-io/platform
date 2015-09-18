@@ -9,92 +9,58 @@ It is generated from these files:
 	platform.proto
 
 It has these top-level messages:
-	Request
-	RoutedMessage
-	ConsumeEvent
 	Documentation
 	DocumentationList
 	Error
-	Event
+	IpAddress
+	Request
+	Route
+	Routing
 	RouterConfig
 	RouterConfigList
-	PossibleError
+	ServiceRoute
 */
 package platform
 
 import proto "github.com/golang/protobuf/proto"
+import fmt "fmt"
 import math "math"
 
 // Reference imports to suppress errors if they are not otherwise used.
 var _ = proto.Marshal
+var _ = fmt.Errorf
 var _ = math.Inf
 
-type Method int32
+type IpAddress_Version int32
 
 const (
-	Method_REPLY Method = 14
-	Method_GET   Method = 15
+	IpAddress_V4 IpAddress_Version = 0
+	IpAddress_V6 IpAddress_Version = 1
 )
 
-var Method_name = map[int32]string{
-	14: "REPLY",
-	15: "GET",
+var IpAddress_Version_name = map[int32]string{
+	0: "V4",
+	1: "V6",
 }
-var Method_value = map[string]int32{
-	"REPLY": 14,
-	"GET":   15,
+var IpAddress_Version_value = map[string]int32{
+	"V4": 0,
+	"V6": 1,
 }
 
-func (x Method) Enum() *Method {
-	p := new(Method)
+func (x IpAddress_Version) Enum() *IpAddress_Version {
+	p := new(IpAddress_Version)
 	*p = x
 	return p
 }
-func (x Method) String() string {
-	return proto.EnumName(Method_name, int32(x))
+func (x IpAddress_Version) String() string {
+	return proto.EnumName(IpAddress_Version_name, int32(x))
 }
-func (x *Method) UnmarshalJSON(data []byte) error {
-	value, err := proto.UnmarshalJSONEnum(Method_value, data, "Method")
+func (x *IpAddress_Version) UnmarshalJSON(data []byte) error {
+	value, err := proto.UnmarshalJSONEnum(IpAddress_Version_value, data, "IpAddress_Version")
 	if err != nil {
 		return err
 	}
-	*x = Method(value)
-	return nil
-}
-
-type Resource int32
-
-const (
-	Resource_DOCUMENTATION      Resource = 65533
-	Resource_DOCUMENTATION_LIST Resource = 65534
-	Resource_ERROR              Resource = 65535
-)
-
-var Resource_name = map[int32]string{
-	65533: "DOCUMENTATION",
-	65534: "DOCUMENTATION_LIST",
-	65535: "ERROR",
-}
-var Resource_value = map[string]int32{
-	"DOCUMENTATION":      65533,
-	"DOCUMENTATION_LIST": 65534,
-	"ERROR":              65535,
-}
-
-func (x Resource) Enum() *Resource {
-	p := new(Resource)
-	*p = x
-	return p
-}
-func (x Resource) String() string {
-	return proto.EnumName(Resource_name, int32(x))
-}
-func (x *Resource) UnmarshalJSON(data []byte) error {
-	value, err := proto.UnmarshalJSONEnum(Resource_value, data, "Resource")
-	if err != nil {
-		return err
-	}
-	*x = Resource(value)
+	*x = IpAddress_Version(value)
 	return nil
 }
 
@@ -164,153 +130,9 @@ func (x *RouterConfig_ProtocolType) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-type Request struct {
-	Body             []byte  `protobuf:"bytes,1,opt,name=body" json:"body,omitempty"`
-	Resource         *int32  `protobuf:"varint,2,opt,name=resource" json:"resource,omitempty"`
-	Method           *int32  `protobuf:"varint,3,opt,name=method" json:"method,omitempty"`
-	IpAddress        *string `protobuf:"bytes,4,opt,name=ip_address" json:"ip_address,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
-}
-
-func (m *Request) Reset()         { *m = Request{} }
-func (m *Request) String() string { return proto.CompactTextString(m) }
-func (*Request) ProtoMessage()    {}
-
-func (m *Request) GetBody() []byte {
-	if m != nil {
-		return m.Body
-	}
-	return nil
-}
-
-func (m *Request) GetResource() int32 {
-	if m != nil && m.Resource != nil {
-		return *m.Resource
-	}
-	return 0
-}
-
-func (m *Request) GetMethod() int32 {
-	if m != nil && m.Method != nil {
-		return *m.Method
-	}
-	return 0
-}
-
-func (m *Request) GetIpAddress() string {
-	if m != nil && m.IpAddress != nil {
-		return *m.IpAddress
-	}
-	return ""
-}
-
-type RoutedMessage struct {
-	Id               *string `protobuf:"bytes,1,opt,name=id" json:"id,omitempty"`
-	Method           *int32  `protobuf:"varint,2,opt,name=method" json:"method,omitempty"`
-	Resource         *int32  `protobuf:"varint,3,opt,name=resource" json:"resource,omitempty"`
-	ReplyTopic       *string `protobuf:"bytes,4,opt,name=reply_topic" json:"reply_topic,omitempty"`
-	Body             []byte  `protobuf:"bytes,5,opt,name=body" json:"body,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
-}
-
-func (m *RoutedMessage) Reset()         { *m = RoutedMessage{} }
-func (m *RoutedMessage) String() string { return proto.CompactTextString(m) }
-func (*RoutedMessage) ProtoMessage()    {}
-
-func (m *RoutedMessage) GetId() string {
-	if m != nil && m.Id != nil {
-		return *m.Id
-	}
-	return ""
-}
-
-func (m *RoutedMessage) GetMethod() int32 {
-	if m != nil && m.Method != nil {
-		return *m.Method
-	}
-	return 0
-}
-
-func (m *RoutedMessage) GetResource() int32 {
-	if m != nil && m.Resource != nil {
-		return *m.Resource
-	}
-	return 0
-}
-
-func (m *RoutedMessage) GetReplyTopic() string {
-	if m != nil && m.ReplyTopic != nil {
-		return *m.ReplyTopic
-	}
-	return ""
-}
-
-func (m *RoutedMessage) GetBody() []byte {
-	if m != nil {
-		return m.Body
-	}
-	return nil
-}
-
-type ConsumeEvent struct {
-	Description      *string          `protobuf:"bytes,1,opt,name=description" json:"description,omitempty"`
-	Event            *Event           `protobuf:"bytes,2,opt,name=event" json:"event,omitempty"`
-	Responses        []*Event         `protobuf:"bytes,3,rep,name=responses" json:"responses,omitempty"`
-	PossibleErrors   []*PossibleError `protobuf:"bytes,4,rep,name=possible_errors" json:"possible_errors,omitempty"`
-	IsDeprecated     *bool            `protobuf:"varint,5,opt,name=is_deprecated" json:"is_deprecated,omitempty"`
-	Version          *string          `protobuf:"bytes,6,opt,name=version" json:"version,omitempty"`
-	XXX_unrecognized []byte           `json:"-"`
-}
-
-func (m *ConsumeEvent) Reset()         { *m = ConsumeEvent{} }
-func (m *ConsumeEvent) String() string { return proto.CompactTextString(m) }
-func (*ConsumeEvent) ProtoMessage()    {}
-
-func (m *ConsumeEvent) GetDescription() string {
-	if m != nil && m.Description != nil {
-		return *m.Description
-	}
-	return ""
-}
-
-func (m *ConsumeEvent) GetEvent() *Event {
-	if m != nil {
-		return m.Event
-	}
-	return nil
-}
-
-func (m *ConsumeEvent) GetResponses() []*Event {
-	if m != nil {
-		return m.Responses
-	}
-	return nil
-}
-
-func (m *ConsumeEvent) GetPossibleErrors() []*PossibleError {
-	if m != nil {
-		return m.PossibleErrors
-	}
-	return nil
-}
-
-func (m *ConsumeEvent) GetIsDeprecated() bool {
-	if m != nil && m.IsDeprecated != nil {
-		return *m.IsDeprecated
-	}
-	return false
-}
-
-func (m *ConsumeEvent) GetVersion() string {
-	if m != nil && m.Version != nil {
-		return *m.Version
-	}
-	return ""
-}
-
 type Documentation struct {
 	Description      *string         `protobuf:"bytes,1,opt,name=description" json:"description,omitempty"`
-	ConsumeEvents    []*ConsumeEvent `protobuf:"bytes,2,rep,name=consume_events" json:"consume_events,omitempty"`
+	ServiceRoutes    []*ServiceRoute `protobuf:"bytes,2,rep,name=service_routes" json:"service_routes,omitempty"`
 	XXX_unrecognized []byte          `json:"-"`
 }
 
@@ -325,9 +147,9 @@ func (m *Documentation) GetDescription() string {
 	return ""
 }
 
-func (m *Documentation) GetConsumeEvents() []*ConsumeEvent {
+func (m *Documentation) GetServiceRoutes() []*ServiceRoute {
 	if m != nil {
-		return m.ConsumeEvents
+		return m.ServiceRoutes
 	}
 	return nil
 }
@@ -364,44 +186,124 @@ func (m *Error) GetMessage() string {
 	return ""
 }
 
-type Event struct {
-	Organization     *string `protobuf:"bytes,4,opt,name=organization" json:"organization,omitempty"`
-	Method           *string `protobuf:"bytes,1,opt,name=method" json:"method,omitempty"`
-	Resource         *string `protobuf:"bytes,2,opt,name=resource" json:"resource,omitempty"`
-	Payload          *string `protobuf:"bytes,3,opt,name=payload" json:"payload,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+type IpAddress struct {
+	Address          *string            `protobuf:"bytes,1,opt,name=address" json:"address,omitempty"`
+	Version          *IpAddress_Version `protobuf:"varint,2,opt,name=version,enum=platform.IpAddress_Version" json:"version,omitempty"`
+	XXX_unrecognized []byte             `json:"-"`
 }
 
-func (m *Event) Reset()         { *m = Event{} }
-func (m *Event) String() string { return proto.CompactTextString(m) }
-func (*Event) ProtoMessage()    {}
+func (m *IpAddress) Reset()         { *m = IpAddress{} }
+func (m *IpAddress) String() string { return proto.CompactTextString(m) }
+func (*IpAddress) ProtoMessage()    {}
 
-func (m *Event) GetOrganization() string {
-	if m != nil && m.Organization != nil {
-		return *m.Organization
+func (m *IpAddress) GetAddress() string {
+	if m != nil && m.Address != nil {
+		return *m.Address
 	}
 	return ""
 }
 
-func (m *Event) GetMethod() string {
-	if m != nil && m.Method != nil {
-		return *m.Method
+func (m *IpAddress) GetVersion() IpAddress_Version {
+	if m != nil && m.Version != nil {
+		return *m.Version
+	}
+	return IpAddress_V4
+}
+
+type Request struct {
+	Uuid             *string  `protobuf:"bytes,1,opt,name=uuid" json:"uuid,omitempty"`
+	Routing          *Routing `protobuf:"bytes,2,opt,name=routing" json:"routing,omitempty"`
+	Context          []byte   `protobuf:"bytes,3,opt,name=context" json:"context,omitempty"`
+	Payload          []byte   `protobuf:"bytes,4,opt,name=payload" json:"payload,omitempty"`
+	Completed        *bool    `protobuf:"varint,5,opt,name=completed" json:"completed,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *Request) Reset()         { *m = Request{} }
+func (m *Request) String() string { return proto.CompactTextString(m) }
+func (*Request) ProtoMessage()    {}
+
+func (m *Request) GetUuid() string {
+	if m != nil && m.Uuid != nil {
+		return *m.Uuid
 	}
 	return ""
 }
 
-func (m *Event) GetResource() string {
-	if m != nil && m.Resource != nil {
-		return *m.Resource
+func (m *Request) GetRouting() *Routing {
+	if m != nil {
+		return m.Routing
+	}
+	return nil
+}
+
+func (m *Request) GetContext() []byte {
+	if m != nil {
+		return m.Context
+	}
+	return nil
+}
+
+func (m *Request) GetPayload() []byte {
+	if m != nil {
+		return m.Payload
+	}
+	return nil
+}
+
+func (m *Request) GetCompleted() bool {
+	if m != nil && m.Completed != nil {
+		return *m.Completed
+	}
+	return false
+}
+
+type Route struct {
+	Uri              *string    `protobuf:"bytes,1,opt,name=uri" json:"uri,omitempty"`
+	IpAddress        *IpAddress `protobuf:"bytes,2,opt,name=ip_address" json:"ip_address,omitempty"`
+	XXX_unrecognized []byte     `json:"-"`
+}
+
+func (m *Route) Reset()         { *m = Route{} }
+func (m *Route) String() string { return proto.CompactTextString(m) }
+func (*Route) ProtoMessage()    {}
+
+func (m *Route) GetUri() string {
+	if m != nil && m.Uri != nil {
+		return *m.Uri
 	}
 	return ""
 }
 
-func (m *Event) GetPayload() string {
-	if m != nil && m.Payload != nil {
-		return *m.Payload
+func (m *Route) GetIpAddress() *IpAddress {
+	if m != nil {
+		return m.IpAddress
 	}
-	return ""
+	return nil
+}
+
+type Routing struct {
+	RouteTo          []*Route `protobuf:"bytes,1,rep,name=route_to" json:"route_to,omitempty"`
+	RouteFrom        []*Route `protobuf:"bytes,2,rep,name=route_from" json:"route_from,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *Routing) Reset()         { *m = Routing{} }
+func (m *Routing) String() string { return proto.CompactTextString(m) }
+func (*Routing) ProtoMessage()    {}
+
+func (m *Routing) GetRouteTo() []*Route {
+	if m != nil {
+		return m.RouteTo
+	}
+	return nil
+}
+
+func (m *Routing) GetRouteFrom() []*Route {
+	if m != nil {
+		return m.RouteFrom
+	}
+	return nil
 }
 
 type RouterConfig struct {
@@ -460,33 +362,56 @@ func (m *RouterConfigList) GetRouterConfigs() []*RouterConfig {
 	return nil
 }
 
-type PossibleError struct {
-	Error            *string `protobuf:"bytes,1,opt,name=error" json:"error,omitempty"`
-	Description      *string `protobuf:"bytes,2,opt,name=description" json:"description,omitempty"`
-	XXX_unrecognized []byte  `json:"-"`
+type ServiceRoute struct {
+	Description      *string  `protobuf:"bytes,1,opt,name=description" json:"description,omitempty"`
+	Request          *Route   `protobuf:"bytes,2,opt,name=request" json:"request,omitempty"`
+	Responses        []*Route `protobuf:"bytes,3,rep,name=responses" json:"responses,omitempty"`
+	IsDeprecated     *bool    `protobuf:"varint,4,opt,name=is_deprecated" json:"is_deprecated,omitempty"`
+	Version          *string  `protobuf:"bytes,5,opt,name=version" json:"version,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
 }
 
-func (m *PossibleError) Reset()         { *m = PossibleError{} }
-func (m *PossibleError) String() string { return proto.CompactTextString(m) }
-func (*PossibleError) ProtoMessage()    {}
+func (m *ServiceRoute) Reset()         { *m = ServiceRoute{} }
+func (m *ServiceRoute) String() string { return proto.CompactTextString(m) }
+func (*ServiceRoute) ProtoMessage()    {}
 
-func (m *PossibleError) GetError() string {
-	if m != nil && m.Error != nil {
-		return *m.Error
-	}
-	return ""
-}
-
-func (m *PossibleError) GetDescription() string {
+func (m *ServiceRoute) GetDescription() string {
 	if m != nil && m.Description != nil {
 		return *m.Description
 	}
 	return ""
 }
 
+func (m *ServiceRoute) GetRequest() *Route {
+	if m != nil {
+		return m.Request
+	}
+	return nil
+}
+
+func (m *ServiceRoute) GetResponses() []*Route {
+	if m != nil {
+		return m.Responses
+	}
+	return nil
+}
+
+func (m *ServiceRoute) GetIsDeprecated() bool {
+	if m != nil && m.IsDeprecated != nil {
+		return *m.IsDeprecated
+	}
+	return false
+}
+
+func (m *ServiceRoute) GetVersion() string {
+	if m != nil && m.Version != nil {
+		return *m.Version
+	}
+	return ""
+}
+
 func init() {
-	proto.RegisterEnum("platform.Method", Method_name, Method_value)
-	proto.RegisterEnum("platform.Resource", Resource_name, Resource_value)
+	proto.RegisterEnum("platform.IpAddress_Version", IpAddress_Version_name, IpAddress_Version_value)
 	proto.RegisterEnum("platform.RouterConfig_RouterType", RouterConfig_RouterType_name, RouterConfig_RouterType_value)
 	proto.RegisterEnum("platform.RouterConfig_ProtocolType", RouterConfig_ProtocolType_name, RouterConfig_ProtocolType_value)
 }

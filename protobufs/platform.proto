@@ -1,32 +1,10 @@
+syntax="proto2";
+
 package platform;
-
-message Request {
-    optional bytes body             = 1;
-    optional int32 resource         = 2;
-    optional int32 method           = 3;
-    optional string ip_address      = 4;
-}
-
-message RoutedMessage {
-    optional string id          = 1;
-    optional int32 method       = 2;
-    optional int32 resource     = 3;
-    optional string reply_topic = 4;
-    optional bytes body         = 5;
-}
-
-message ConsumeEvent {
-    optional string description             = 1;
-    optional Event event                    = 2;
-    repeated Event responses                = 3;
-    repeated PossibleError possible_errors  = 4;
-    optional bool is_deprecated             = 5;
-    optional string version                 = 6;
-}
 
 message Documentation {
     optional string description             = 1;
-    repeated ConsumeEvent consume_events    = 2;
+    repeated ServiceRoute service_routes    = 2;
 }
 
 message DocumentationList {
@@ -37,11 +15,32 @@ message Error {
     optional string message     = 1;
 }
 
-message Event {
-    optional string organization    = 4;
-    optional string method          = 1;
-    optional string resource        = 2;
-    optional string payload         = 3;
+message IpAddress {
+    enum Version {
+        V4      = 0;
+        V6      = 1;
+    }
+
+    optional string address         = 1;
+    optional Version version        = 2;
+}
+
+message Request {
+    optional string uuid            = 1;
+    optional Routing routing        = 2;
+    optional bytes context          = 3;
+    optional bytes payload          = 4;
+    optional bool completed         = 5;
+}
+
+message Route {
+    optional string uri             = 1;
+    optional IpAddress ip_address   = 2;
+}
+
+message Routing {
+    repeated Route route_to     = 1;
+    repeated Route route_from   = 2;
 }
 
 message RouterConfig {
@@ -65,18 +64,10 @@ message RouterConfigList {
     repeated RouterConfig router_configs = 1;
 }
 
-enum Method {
-    REPLY       = 14;
-    GET         = 15;
-}
-
-message PossibleError {
-    optional string error        = 1;
-    optional string description  = 2;
-}
-
-enum Resource {
-    DOCUMENTATION           = 65533;
-    DOCUMENTATION_LIST      = 65534;
-    ERROR                   = 65535;
+message ServiceRoute {
+    optional string description             = 1;
+    optional Route request                  = 2;
+    repeated Route responses                = 3;
+    optional bool is_deprecated             = 4;
+    optional string version                 = 5;
 }
