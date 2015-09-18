@@ -25,16 +25,9 @@ func subscriptionWorker(subscription *subscription, workQueue chan amqp.Delivery
 }
 
 func subscriberDoWork(subscription *subscription, msg amqp.Delivery) {
-	if err := subscription.Handler.HandleMessage(msg.Body); err != nil {
-		// If this message has already been redelivered once, just ack it to discard it
-		if msg.Redelivered {
-			msg.Ack(true)
-		} else {
-			msg.Reject(true)
-		}
-	} else {
-		msg.Ack(true)
-	}
+	subscription.Handler.HandleMessage(msg.Body)
+
+	msg.Ack(false)
 }
 
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
