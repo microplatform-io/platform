@@ -138,6 +138,27 @@ func NewService(publisher Publisher, subscriber Subscriber) (*Service, error) {
 	}, nil
 }
 
+func NewBasicService() (*Service, error) {
+	rabbitUser := Getenv("RABBITMQ_USER", "admin")
+	rabbitPass := Getenv("RABBITMQ_PASS", "admin")
+	rabbitAddr := Getenv("RABBITMQ_PORT_5672_TCP_ADDR", "127.0.0.1")
+	rabbitPort := Getenv("RABBITMQ_PORT_5672_TCP_PORT", "5672")
+
+	connectionManager := NewAmqpConnectionManager(rabbitUser, rabbitPass, rabbitAddr+":"+rabbitPort, "")
+
+	publisher, err := NewAmqpPublisher(connectionManager)
+	if err != nil {
+		return nil, err
+	}
+
+	subscriber, err := NewAmqpSubscriber(connectionManager, "echo-service")
+	if err != nil {
+		return nil, err
+	}
+
+	return NewService(publisher, subscriber)
+}
+
 func CreateServiceRequestToken(requestPayload []byte) string {
 	token := append(requestPayload, ParseUUID(serviceToken)...)
 	shaToken := sha1.Sum(token)
