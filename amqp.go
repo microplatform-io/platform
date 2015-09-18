@@ -29,11 +29,14 @@ func subscriberDoWork(subscription *subscription, msg amqp.Delivery) {
 	if err := subscription.Handler.HandleMessage(msg.Body); err != nil {
 		// If this message has already been redelivered once, just ack it to discard it
 		if msg.Redelivered {
+			logger.Println("> Error handling message for the 2nd time.  Acking to get rid of it.")
 			msg.Ack(true)
 		} else {
+			logger.Println("> Error handling message first time.  Rejecting message")
 			msg.Reject(true)
 		}
 	} else {
+		logger.Println("> No error handling message. Acking message")
 		msg.Ack(true)
 	}
 }
@@ -212,12 +215,14 @@ func (s *AmqpSubscriber) run() error {
 					handled = true
 
 				case <-time.After(500 * time.Millisecond):
+					logger.Println(">RUN timeout Reached!  this msg is being marked as unhandled..")
 					// ignore
 				}
 			}
 		}
 
 		if !handled {
+			logger.Println(">RUN  unhandled!  this msg is unhandled and now rejecting..")
 			msg.Reject(true)
 		}
 	}
