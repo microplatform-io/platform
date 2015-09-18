@@ -41,12 +41,25 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 		logger.Printf("[StandardRouter.Route] %s - failed to marshal request payload: %s", request.GetUuid(), err)
 	}
 
+	internalResponses := make(chan *Request, 1)
 	responses := make(chan *Request, 1)
 	streamTimeout := make(chan interface{})
 
 	sr.mu.Lock()
-	sr.pendingResponses[request.GetUuid()] = responses
+	sr.pendingResponses[request.GetUuid()] = internalResponses
 	sr.mu.Unlock()
+
+	go func() {
+		for {
+			select {
+			case response := <-internalResponses:
+				responses <- response
+
+			case <-time.After(time.Second):
+				streamTimeout <- nil
+			}
+		}
+	}()
 
 	parsedUri, err := url.Parse(request.Routing.RouteTo[0].GetUri())
 	if err != nil {
