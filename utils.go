@@ -1,10 +1,22 @@
 package platform
 
 import (
-	"os"
-
 	"net/url"
+	"os"
 )
+
+func GenerateResponse(request *Request, response *Request) *Request {
+	response.Uuid = request.Uuid
+
+	if response.Routing == nil {
+		response.Routing = &Routing{}
+	}
+
+	response.Routing.RouteTo = append(response.Routing.RouteTo, request.Routing.RouteFrom...)
+	response.Routing.RouteFrom = []*Route{}
+
+	return response
+}
 
 func Getenv(key, defaultValue string) string {
 	if value := os.Getenv(key); value != "" {
