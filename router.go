@@ -107,7 +107,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 				logger.Printf("[StandardRouter.Subscriber] this was the last response, closing and deleting the responses chan")
 
 				delete(router.pendingResponses, response.GetUuid())
-				close(responses)
+				// close(responses)
 			}
 		}
 		router.mu.Unlock()
