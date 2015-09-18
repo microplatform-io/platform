@@ -1,6 +1,18 @@
 package platform
 
-import "net/url"
+import (
+	"os"
+
+	"net/url"
+)
+
+func Getenv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+
+	return defaultValue
+}
 
 func RouteToSchemeMatches(request *Request, scheme string) bool {
 	if request.Routing == nil {
