@@ -2,11 +2,10 @@ package platform
 
 import (
 	"errors"
-	"github.com/streadway/amqp"
-	"math/rand"
 	"net"
-	"sync"
 	"time"
+
+	"github.com/streadway/amqp"
 )
 
 const PUBLISH_RETRIES = 3
@@ -91,40 +90,6 @@ func (p *AmqpPublisher) resetChannel() error {
 
 func NewAmqpPublisher(connectionManager *AmqpConnectionManager) (*AmqpPublisher, error) {
 	return &AmqpPublisher{connectionManager: connectionManager}, nil
-}
-
-type MultiPublisher struct {
-	publishers    []Publisher
-	nextPublisher int
-}
-
-func (p *MultiPublisher) Publish(topic string, body []byte) error {
-	var publishErr error
-
-	for i := 0; i < len(p.publishers); i++ {
-		publishErr = p.publishers[p.nextPublisher].Publish(topic, body)
-
-		p.nextPublisher = (p.nextPublisher + 1) % len(p.publishers)
-
-		if publishErr == nil {
-			return nil
-		}
-	}
-
-	return publishErr
-}
-
-func NewMultiPublisher(publishers ...Publisher) Publisher {
-	p := make([]Publisher, len(publishers))
-	copy(p, publishers)
-
-	rand.Seed(time.Now().UTC().UnixNano())
-	ptr := rand.Intn(len(publishers))
-
-	return &MultiPublisher{
-		publishers:    p,
-		nextPublisher: ptr,
-	}
 }
 
 type subscription struct {
@@ -238,39 +203,6 @@ func NewAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (
 		connectionManager: connectionManager,
 		queue:             queue,
 	}, nil
-}
-
-type MultiSubscriber struct {
-	subscribers []Subscriber
-}
-
-func (s *MultiSubscriber) Run() error {
-	wg := sync.WaitGroup{}
-	wg.Add(len(s.subscribers))
-
-	for i := range s.subscribers {
-		go func(i int) {
-			s.subscribers[i].Run()
-			wg.Done()
-		}(i)
-	}
-
-	wg.Wait()
-
-	return nil
-}
-
-func (s *MultiSubscriber) Subscribe(topic string, handler ConsumerHandler, concurrency int) {
-	for _, subscriber := range s.subscribers {
-		subscriber.Subscribe(topic, handler, concurrency)
-	}
-}
-
-func NewMultiSubscriber(subscribers ...Subscriber) Subscriber {
-	s := make([]Subscriber, len(subscribers))
-	copy(s, subscribers)
-
-	return &MultiSubscriber{s}
 }
 
 // The amqp connection manager handles the persistence of a single connection to be

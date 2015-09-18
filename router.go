@@ -1,8 +1,7 @@
 package platform
 
 import (
-	"errors"
-	"fmt"
+	"net/url"
 	"sync"
 	"time"
 )
@@ -12,7 +11,8 @@ const (
 )
 
 type Router interface {
-	Route(routedMessage *RoutedMessage, expires time.Duration) (*RoutedMessage, error)
+	Route(request *Request) (chan *Request, chan interface{})
+	RouteWithTimeout(request *Request, timeout time.Duration) (chan *Request, chan interface{})
 }
 
 type StandardRouter struct {
@@ -21,103 +21,107 @@ type StandardRouter struct {
 
 	topic string
 
-	pendingRequests map[string]chan *RoutedMessage
-	mu              sync.Mutex
+	pendingResponses map[string]chan *Request
+	mu               sync.Mutex
 }
 
-func (sr *StandardRouter) Route(msg *RoutedMessage, timeout time.Duration) (*RoutedMessage, error) {
-	msg.Id = String(CreateUUID())
-	msg.ReplyTopic = String(sr.topic)
+func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface{}) {
+	if request.Uuid == nil {
+		request.Uuid = String("request-" + CreateUUID())
+	}
 
-	logger.Printf("> routing routed message: %s", msg)
+	request.Routing.RouteFrom = append(request.Routing.RouteFrom, &Route{
+		Uri: String(sr.topic),
+	})
 
-	payload, err := Marshal(msg)
+	logger.Printf("[StandardRouter.Route] %s - routing request: %s", request.GetUuid(), request)
+
+	payload, err := Marshal(request)
 	if err != nil {
-		return nil, errors.New("MARSHAL ERROR")
+		logger.Printf("[StandardRouter.Route] %s - failed to marshal request payload: %s", request.GetUuid(), err)
 	}
 
-	responseChan := make(chan *RoutedMessage, 1)
+	responses := make(chan *Request, 1)
+	streamTimeout := make(chan interface{})
 
 	sr.mu.Lock()
-	sr.pendingRequests[msg.GetId()] = responseChan
+	sr.pendingResponses[request.GetUuid()] = responses
 	sr.mu.Unlock()
 
-	if err := sr.publisher.Publish(fmt.Sprintf("%d_%d", msg.GetMethod(), msg.GetResource()), payload); err != nil {
-		return nil, err
+	parsedUri, err := url.Parse(request.Routing.RouteTo[0].GetUri())
+	if err != nil {
+		logger.Fatalf("[StandardRouter.Route] %s - failed to parse route to uri: %s", request.GetUuid(), err)
 	}
 
-	var response *RoutedMessage
-
-	select {
-	case response = <-responseChan:
-		// Good to proceed
-	case <-time.After(timeout):
-		logger.Printf("request.timeout under Resource : %d, Method : %d\n", msg.GetResource(), msg.GetMethod())
-
-		// Emit a request timeout to any microservice that is interested
-		sr.publisher.Publish("request.timeout", payload)
-
-		errorBytes, _ := Marshal(&Error{
-			Message: String("API Request has timed out"),
-		})
-
-		response = &RoutedMessage{
-			Method:   Int32(int32(Method_REPLY)),
-			Resource: Int32(int32(Resource_ERROR)),
-			Body:     errorBytes,
-		}
+	if err := sr.publisher.Publish(parsedUri.Scheme+"-"+parsedUri.Path, payload); err != nil {
+		logger.Printf("[StandardRouter.Route] %s - failed to publish request to microservices: %s", request.GetUuid(), err)
 	}
 
-	sr.mu.Lock()
-	delete(sr.pendingRequests, msg.GetId())
-	sr.mu.Unlock()
+	return responses, streamTimeout
+}
 
-	return response, nil
+func (sr *StandardRouter) RouteWithTimeout(request *Request, timeout time.Duration) (chan *Request, chan interface{}) {
+	responses, streamTimeout := sr.Route(request)
+
+	time.AfterFunc(timeout, func() {
+		streamTimeout <- nil
+	})
+
+	return responses, streamTimeout
 }
 
 func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
-	logger.Printf("> creating a new standard router.")
-	logger.Printf("> publisher: %#v", publisher)
-	logger.Printf("> subscriber: %#v", subscriber)
+	logger.Printf("[NewStandardRouter] creating a new standard router.")
+	logger.Printf("[NewStandardRouter] using publisher: %#v", publisher)
+	logger.Printf("[NewStandardRouter] using subscriber: %#v", subscriber)
 
 	router := &StandardRouter{
-		publisher:       publisher,
-		subscriber:      subscriber,
-		topic:           "router_" + CreateUUID(),
-		pendingRequests: map[string]chan *RoutedMessage{},
+		publisher:        publisher,
+		subscriber:       subscriber,
+		topic:            "router-" + CreateUUID(),
+		pendingResponses: map[string]chan *Request{},
 	}
 
 	subscriber.Subscribe(router.topic, ConsumerHandlerFunc(func(body []byte) error {
-		logger.Println("> receiving message for router")
+		logger.Println("[StandardRouter.Subscriber] receiving message for router")
 
-		routedMessage := &RoutedMessage{}
-		if err := Unmarshal(body, routedMessage); err != nil {
-			return nil
+		response := &Request{}
+		if err := Unmarshal(body, response); err != nil {
+			logger.Printf("[StandardRouter.Subscriber] failed to unmarshal response for router: %s", err)
+
+			return err
 		}
 
-		logger.Printf("> received message for router: %s", routedMessage)
+		logger.Printf("[StandardRouter.Subscriber] received response for router: %s", response)
 
 		router.mu.Lock()
-		if replyChan, exists := router.pendingRequests[routedMessage.GetId()]; exists {
+		if responses, exists := router.pendingResponses[response.GetUuid()]; exists {
 			select {
-			case replyChan <- routedMessage:
-				logger.Println("> reply chan was available")
+			case responses <- response:
+				logger.Printf("[StandardRouter.Subscriber] reply chan was available")
 			default:
-				logger.Println("> reply chan was not available")
+				logger.Printf("[StandardRouter.Subscriber] reply chan was not available")
+			}
+
+			if response.GetCompleted() {
+				logger.Printf("[StandardRouter.Subscriber] this was the last response, closing and deleting the responses chan")
+
+				delete(router.pendingResponses, response.GetUuid())
+				close(responses)
 			}
 		}
 		router.mu.Unlock()
 
-		logger.Printf("> completed message for router: %s", routedMessage)
+		logger.Printf("[StandardRouter.Subscriber] completed routing response: %s", response)
 
 		return nil
 	}), MAX_CONCURRENCY)
 
 	go func() {
 		for i := 0; i <= 100; i++ {
-			logger.Println("> running subscriber...")
+			logger.Println("[StandardRouter.Subscriber] running subscriber...")
 			if err := subscriber.Run(); err != nil {
-				logger.Printf("> subscriber has exited: %s", err)
+				logger.Printf("[StandardRouter.Subscriber] subscriber has exited: %s", err)
 			}
 
 			time.Sleep(time.Duration(i%5) * time.Second)
@@ -126,7 +130,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 		panic("Final connection died. Respawning...")
 	}()
 
-	logger.Printf("> router has been created: %#v", router)
+	logger.Printf("[NewStandardRouter] router has been created: %#v", router)
 
 	return router
 }

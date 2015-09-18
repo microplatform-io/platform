@@ -26,16 +26,3 @@ type Message interface {
 	String() string
 	ProtoMessage()
 }
-
-func GenerateRoutedMessage(method Method, resource Resource, message Message) (*RoutedMessage, error) {
-	cloudBody, err := Marshal(message)
-	if err != nil {
-		return nil, err
-	}
-
-	return &RoutedMessage{
-		Method:   proto.Int32(int32(method)),
-		Resource: proto.Int32(int32(resource)),
-		Body:     cloudBody,
-	}, nil
-}

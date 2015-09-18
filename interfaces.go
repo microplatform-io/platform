@@ -5,13 +5,13 @@ import (
 )
 
 type Handler interface {
-	HandleRoutedMessage(*RoutedMessage) (*RoutedMessage, error)
+	Handle(responseSender ResponseSender, request *Request)
 }
 
-type HandlerFunc func(*RoutedMessage) (*RoutedMessage, error)
+type HandlerFunc func(responseSender ResponseSender, request *Request)
 
-func (handlerFunc HandlerFunc) HandleRoutedMessage(cloudMessage *RoutedMessage) (*RoutedMessage, error) {
-	return handlerFunc(cloudMessage)
+func (handlerFunc HandlerFunc) Handle(responseSender ResponseSender, request *Request) {
+	handlerFunc(responseSender, request)
 }
 
 type Subscriber interface {
@@ -21,6 +21,10 @@ type Subscriber interface {
 
 type Publisher interface {
 	Publish(topic string, body []byte) error
+}
+
+type ResponseSender interface {
+	Send(response *Request)
 }
 
 type Consumer interface {
