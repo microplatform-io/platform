@@ -128,7 +128,7 @@ func (s *AmqpSubscriber) run() error {
 
 	logger.Printf("> AmqpSubscriber.run: got channel: %s", conn)
 
-	if _, err := ch.QueueDeclare(s.queue, false, true, false, false, nil); err != nil {
+	if _, err := ch.QueueDeclare(s.queue, true, false, false, false, nil); err != nil {
 		return err
 	}
 
