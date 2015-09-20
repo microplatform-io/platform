@@ -26,6 +26,16 @@ func Getenv(key, defaultValue string) string {
 	return defaultValue
 }
 
+func RouteToUri(uri string) *Routing {
+	return &Routing{
+		RouteTo: []*Route{
+			&Route{
+				Uri: String(uri),
+			},
+		},
+	}
+}
+
 func RouteToSchemeMatches(request *Request, scheme string) bool {
 	if request.Routing == nil {
 		return false
