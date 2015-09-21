@@ -9,6 +9,7 @@ import (
 var (
 	logger       = GetLogger("platform")
 	serviceToken = os.Getenv("SERVICE_TOKEN")
+	serviceName  = os.Getenv("SERVICE_NAME")
 )
 
 type Courier struct {
@@ -151,7 +152,7 @@ func NewBasicService() (*Service, error) {
 		return nil, err
 	}
 
-	subscriber, err := NewAmqpSubscriber(connectionManager, "echo-service")
+	subscriber, err := NewAmqpSubscriber(connectionManager, serviceName)
 	if err != nil {
 		return nil, err
 	}
