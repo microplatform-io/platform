@@ -9,7 +9,6 @@ import (
 var (
 	logger       = GetLogger("platform")
 	serviceToken = os.Getenv("SERVICE_TOKEN")
-	serviceName  = os.Getenv("SERVICE_NAME")
 )
 
 type Courier struct {
@@ -101,6 +100,7 @@ type Service struct {
 	publisher  Publisher
 	subscriber Subscriber
 	courier    *Courier
+	name       string
 }
 
 func (s *Service) AddHandler(path string, handler Handler, concurrency int) {
@@ -132,14 +132,15 @@ func (s *Service) Run() {
 	logger.Println("Subscriptions have stopped")
 }
 
-func NewService(publisher Publisher, subscriber Subscriber) (*Service, error) {
+func NewService(serviceName string, publisher Publisher, subscriber Subscriber) (*Service, error) {
 	return &Service{
 		subscriber: subscriber,
 		courier:    NewCourier(publisher),
+		name:       serviceName,
 	}, nil
 }
 
-func NewBasicService() (*Service, error) {
+func NewBasicService(serviceName string) (*Service, error) {
 	rabbitUser := Getenv("RABBITMQ_USER", "admin")
 	rabbitPass := Getenv("RABBITMQ_PASS", "admin")
 	rabbitAddr := Getenv("RABBITMQ_PORT_5672_TCP_ADDR", "127.0.0.1")
@@ -157,7 +158,7 @@ func NewBasicService() (*Service, error) {
 		return nil, err
 	}
 
-	return NewService(publisher, subscriber)
+	return NewService(serviceName, publisher, subscriber)
 }
 
 func CreateServiceRequestToken(requestPayload []byte) string {
