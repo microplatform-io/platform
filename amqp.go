@@ -86,10 +86,9 @@ func NewAmqpPublisher(connectionManager *AmqpConnectionManager) (*AmqpPublisher,
 }
 
 type subscription struct {
-	Topic       string
-	Handler     ConsumerHandler
-	Concurrency int
-	workQueue   chan amqp.Delivery
+	Topic     string
+	Handler   ConsumerHandler
+	workQueue chan amqp.Delivery
 }
 
 type AmqpSubscriber struct {
@@ -140,7 +139,8 @@ func (s *AmqpSubscriber) run() error {
 
 		subscription.workQueue = make(chan amqp.Delivery)
 
-		for i := 0; i <= subscription.Concurrency; i++ {
+		// TODO: Determine an ideal worker pool
+		for i := 0; i <= 20; i++ {
 			go subscriptionWorker(subscription, subscription.workQueue)
 		}
 	}
@@ -183,11 +183,10 @@ func (s *AmqpSubscriber) run() error {
 	return errors.New("connection has been closed")
 }
 
-func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler, concurrency int) {
+func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) {
 	s.subscriptions = append(s.subscriptions, &subscription{
-		Topic:       topic,
-		Handler:     handler,
-		Concurrency: concurrency,
+		Topic:   topic,
+		Handler: handler,
 	})
 }
 

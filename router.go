@@ -6,10 +6,6 @@ import (
 	"time"
 )
 
-const (
-	MAX_CONCURRENCY = 20
-)
-
 type Router interface {
 	Route(request *Request) (chan *Request, chan interface{})
 	RouteWithTimeout(request *Request, timeout time.Duration) (chan *Request, chan interface{})
@@ -128,7 +124,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 		logger.Printf("[StandardRouter.Subscriber] completed routing response: %s", response)
 
 		return nil
-	}), MAX_CONCURRENCY)
+	}))
 
 	go func() {
 		for i := 0; i <= 100; i++ {

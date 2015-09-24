@@ -16,7 +16,7 @@ func (handlerFunc HandlerFunc) Handle(responseSender ResponseSender, request *Re
 
 type Subscriber interface {
 	Run() error
-	Subscribe(topic string, handler ConsumerHandler, concurrency int)
+	Subscribe(topic string, handler ConsumerHandler)
 }
 
 type Publisher interface {

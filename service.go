@@ -16,6 +16,12 @@ type Courier struct {
 }
 
 func (c *Courier) Send(response *Request) {
+	if response.GetCompleted() {
+		logger.Printf("[Courier] %s sending FINAL %s", response.GetUuid(), response.Routing.RouteTo[0].GetUri())
+	} else {
+		logger.Printf("[Courier] %s sending INTERMEDIARY %s", response.GetUuid(), response.Routing.RouteTo[0].GetUri())
+	}
+
 	c.responses <- response
 }
 
@@ -73,17 +79,11 @@ func NewRequestHeartbeatCourier(parent ResponseSender, request *Request) *Reques
 		for {
 			select {
 			case <-time.After(500 * time.Millisecond):
-				logger.Printf("[NewRequestHeartbeatCourier] %s sending heartbeat", request.GetUuid())
-
-				parent.Send(&Request{
-					Uuid: request.Uuid,
-					Routing: &Routing{
-						RouteTo: append([]*Route{&Route{Uri: String("resource:///heartbeat")}}, request.Routing.RouteFrom...),
-					},
-				})
+				parent.Send(GenerateResponse(request, &Request{
+					Routing: RouteToUri("resource:///heartbeat"),
+				}))
 
 			case <-quit:
-				logger.Printf("[NewRequestHeartbeatCourier] %s handler has sent completed request, exiting heartbeat", request.GetUuid())
 				return
 
 			}
@@ -103,7 +103,7 @@ type Service struct {
 	name       string
 }
 
-func (s *Service) AddHandler(path string, handler Handler, concurrency int) {
+func (s *Service) AddHandler(path string, handler Handler) {
 	logger.Println("[Service.AddHandler] adding handler", path)
 
 	s.subscriber.Subscribe("microservice-"+path, ConsumerHandlerFunc(func(p []byte) error {
@@ -119,11 +119,11 @@ func (s *Service) AddHandler(path string, handler Handler, concurrency int) {
 		handler.Handle(NewRequestHeartbeatCourier(s.courier, request), request)
 
 		return nil
-	}), concurrency)
+	}))
 }
 
-func (s *Service) AddListener(topic string, handler ConsumerHandler, concurrency int) {
-	s.subscriber.Subscribe(topic, handler, concurrency)
+func (s *Service) AddListener(topic string, handler ConsumerHandler) {
+	s.subscriber.Subscribe(topic, handler)
 }
 
 func (s *Service) Run() {
