@@ -1,7 +1,6 @@
 package platform
 
 import (
-	"crypto/sha1"
 	"os"
 	"time"
 )
@@ -159,19 +158,4 @@ func NewBasicService(serviceName string) (*Service, error) {
 	}
 
 	return NewService(serviceName, publisher, subscriber)
-}
-
-func CreateServiceRequestToken(requestPayload []byte) string {
-	token := append(requestPayload, ParseUUID(serviceToken)...)
-	shaToken := sha1.Sum(token)
-	return string(shaToken[:])
-}
-
-func IsServiceRequestToken(token string, requestPayload []byte) bool {
-	createdToken := CreateServiceRequestToken(requestPayload)
-	if token == createdToken {
-		return true
-	}
-
-	return false
 }

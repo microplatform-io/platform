@@ -3,6 +3,7 @@ package platform
 import (
 	"net/url"
 	"os"
+	"strings"
 )
 
 func GenerateResponse(request *Request, response *Request) *Request {
@@ -24,6 +25,24 @@ func Getenv(key, defaultValue string) string {
 	}
 
 	return defaultValue
+}
+
+func IsInternalRequest(request *Request) bool {
+	if request.Routing == nil {
+		return false
+	}
+
+	if request.Routing.RouteFrom == nil {
+		return false
+	}
+
+	for _, route := range request.Routing.RouteFrom {
+		if strings.HasPrefix(route.GetUri(), "microservice:///") {
+			return true
+		}
+	}
+
+	return false
 }
 
 func RouteToUri(uri string) *Routing {
