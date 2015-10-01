@@ -49,10 +49,20 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 		for {
 			select {
 			case response := <-internalResponses:
+				if response.Routing.RouteTo[0].GetUri() == "resource:///heartbeat" {
+					continue
+				}
+
 				responses <- response
+
+				if response.GetCompleted() {
+					return
+				}
 
 			case <-time.After(time.Second):
 				streamTimeout <- nil
+
+				return
 			}
 		}
 	}()
