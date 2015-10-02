@@ -49,7 +49,8 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 		for {
 			select {
 			case response := <-internalResponses:
-				if response.Routing.RouteTo[0].GetUri() == "resource:///heartbeat" {
+				// Internal requests shouldn't have to deal with heartbeats from other services
+				if IsInternalRequest(request) && response.Routing.RouteTo[0].GetUri() == "resource:///heartbeat" {
 					continue
 				}
 
