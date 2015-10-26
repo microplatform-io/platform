@@ -3,11 +3,12 @@ package platform
 import (
 	"encoding/json"
 	"errors"
-	"github.com/coreos/go-etcd/etcd"
 	"io"
 	"os"
 	"strings"
 	"sync"
+
+	etcd "github.com/coreos/etcd/client"
 )
 
 type ServiceConfig struct {
@@ -187,52 +188,6 @@ func getEtcdBasename(key string) string {
 
 type EtcdConfigManager struct {
 	client *etcd.Client
-}
-
-func (ecm *EtcdConfigManager) GetServiceConfigs(serviceName, servicePort string) (map[string]*ServiceConfig, error) {
-	response, err := ecm.client.Get(serviceName+"/"+servicePort, false, true)
-	if err != nil {
-		return nil, err
-	}
-
-	defaultServiceConfig := &ServiceConfig{}
-	serviceConfigs := map[string]*ServiceConfig{}
-
-	for _, serviceRootNode := range response.Node.Nodes {
-		baseIndex := getEtcdBasename(serviceRootNode.Key)
-
-		switch strings.ToUpper(baseIndex) {
-		case SERVICE_VARIABLE_KEY_USER:
-			defaultServiceConfig.User = serviceRootNode.Value
-		case SERVICE_VARIABLE_KEY_PASS:
-			defaultServiceConfig.Pass = serviceRootNode.Value
-		default:
-			serviceConfig := &ServiceConfig{}
-			for _, serviceAttrNode := range serviceRootNode.Nodes {
-				serviceConfig.Set(getEtcdBasename(serviceAttrNode.Key), serviceAttrNode.Value)
-			}
-
-			serviceConfigs[baseIndex] = serviceConfig
-		}
-	}
-
-	return setServiceConfigsDefaults(serviceConfigs, defaultServiceConfig)
-}
-
-func NewEtcdConfigManager(serviceConfigs map[string]*ServiceConfig) (*EtcdConfigManager, error) {
-	if len(serviceConfigs) <= 0 {
-		return nil, errors.New("No service configs provided")
-	}
-
-	etcdEndpoints := []string{}
-
-	for _, serviceConfig := range serviceConfigs {
-		etcdEndpoints = append(etcdEndpoints, "http://"+serviceConfig.Addr+":"+serviceConfig.Port)
-	}
-
-	return &EtcdConfigManager{
-		client: etcd.NewClient(etcdEndpoints),
-	}, nil
 }
 
 type JsonConfigManager struct {
