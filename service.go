@@ -2,12 +2,18 @@ package platform
 
 import (
 	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 )
 
 var (
-	logger       = GetLogger("platform")
-	serviceToken = os.Getenv("SERVICE_TOKEN")
+	logger                 = GetLogger("platform")
+	serviceToken           = os.Getenv("SERVICE_TOKEN")
+	stillConsuming         bool
+	consumedWorkCount      int
+	consumedWorkCountMutex *sync.Mutex
 )
 
 type Courier struct {
@@ -126,6 +132,30 @@ func (s *Service) AddListener(topic string, handler ConsumerHandler) {
 }
 
 func (s *Service) Run() {
+	stillConsuming = true
+	sigc := make(chan os.Signal, 1)
+	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+
+	consumedWorkCountMutex = &sync.Mutex{}
+
+	// Emit a signal if we catch an interrupt
+	go func() {
+		select {
+		case <-sigc:
+			logger.Println("Recieved exit signal, waiting for work queue to empty..")
+			stillConsuming = false
+
+			for {
+				if getConsumerWorkCount() < 1 {
+					time.Sleep(time.Millisecond * 500)
+					break
+				}
+			}
+			logger.Println("Exiting.")
+			os.Exit(0)
+		}
+	}()
+
 	s.subscriber.Run()
 
 	logger.Println("Subscriptions have stopped")

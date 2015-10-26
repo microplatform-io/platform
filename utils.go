@@ -71,3 +71,21 @@ func RouteToSchemeMatches(request *Request, scheme string) bool {
 
 	return targetUri.Scheme == scheme
 }
+
+func incrementConsumedWorkCount() {
+	consumedWorkCountMutex.Lock()
+	consumedWorkCount += 1
+	consumedWorkCountMutex.Unlock()
+}
+
+func decrementConsumedWorkCount() {
+	consumedWorkCountMutex.Lock()
+	consumedWorkCount -= 1
+	consumedWorkCountMutex.Unlock()
+}
+
+func getConsumerWorkCount() int {
+	consumedWorkCountMutex.Lock()
+	defer consumedWorkCountMutex.Unlock()
+	return consumedWorkCount
+}

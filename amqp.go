@@ -3,6 +3,7 @@ package platform
 import (
 	"errors"
 	"net"
+	"strings"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -25,9 +26,11 @@ func subscriptionWorker(subscription *subscription, workQueue chan amqp.Delivery
 }
 
 func subscriberDoWork(subscription *subscription, msg amqp.Delivery) {
+	incrementConsumedWorkCount()
 	subscription.Handler.HandleMessage(msg.Body)
 
 	msg.Ack(false)
+	decrementConsumedWorkCount()
 }
 
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
@@ -159,7 +162,11 @@ func (s *AmqpSubscriber) run() error {
 	}
 
 	for msg := range msgs {
-
+		if !stillConsuming && !strings.Contains(msg.RoutingKey, "router") {
+			logger.Println("Rejecting the message, because we are shutting down.")
+			msg.Reject(true)
+			continue
+		}
 		handled := false
 
 		for _, subscription := range s.subscriptions {
