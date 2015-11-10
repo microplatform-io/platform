@@ -102,6 +102,8 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 		pendingResponses: map[string]chan *Request{},
 	}
 
+	consumedWorkCountMutex = &sync.Mutex{}
+
 	subscriber.Subscribe(router.topic, ConsumerHandlerFunc(func(body []byte) error {
 		logger.Println("[StandardRouter.Subscriber] receiving message for router")
 
