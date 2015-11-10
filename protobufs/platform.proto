@@ -47,6 +47,7 @@ message RouterConfig {
     enum RouterType {
         ROUTER_TYPE_WEBSOCKET    = 1;
         ROUTER_TYPE_GRPC         = 2;
+        ROUTER_TYPE_HTTP         = 3;
     }
 
     enum ProtocolType {

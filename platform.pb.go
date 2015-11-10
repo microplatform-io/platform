@@ -69,15 +69,18 @@ type RouterConfig_RouterType int32
 const (
 	RouterConfig_ROUTER_TYPE_WEBSOCKET RouterConfig_RouterType = 1
 	RouterConfig_ROUTER_TYPE_GRPC      RouterConfig_RouterType = 2
+	RouterConfig_ROUTER_TYPE_HTTP      RouterConfig_RouterType = 3
 )
 
 var RouterConfig_RouterType_name = map[int32]string{
 	1: "ROUTER_TYPE_WEBSOCKET",
 	2: "ROUTER_TYPE_GRPC",
+	3: "ROUTER_TYPE_HTTP",
 }
 var RouterConfig_RouterType_value = map[string]int32{
 	"ROUTER_TYPE_WEBSOCKET": 1,
 	"ROUTER_TYPE_GRPC":      2,
+	"ROUTER_TYPE_HTTP":      3,
 }
 
 func (x RouterConfig_RouterType) Enum() *RouterConfig_RouterType {
