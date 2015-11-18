@@ -75,12 +75,14 @@ func RouteToSchemeMatches(request *Request, scheme string) bool {
 func incrementConsumedWorkCount() {
 	consumedWorkCountMutex.Lock()
 	consumedWorkCount += 1
+	logger.Print("[incrementConsumedWorkCount] worker count is now = %d", consumedWorkCount)
 	consumedWorkCountMutex.Unlock()
 }
 
 func decrementConsumedWorkCount() {
 	consumedWorkCountMutex.Lock()
 	consumedWorkCount -= 1
+	logger.Print("[decrementConsumedWorkCount] worker count is now = %d", consumedWorkCount)
 	consumedWorkCountMutex.Unlock()
 }
 
