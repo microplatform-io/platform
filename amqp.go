@@ -128,6 +128,9 @@ func (s *AmqpSubscriber) run() error {
 	}
 	defer ch.Close()
 
+	logger.Printf("> AmqpSubscriber.run: setting amqp QOS as the following, prefectchCount %d, prefetchSize: %d, global: %b", MAX_WORKERS, 0, false)
+	ch.Qos(MAX_WORKERS, 0, false)
+
 	logger.Printf("> AmqpSubscriber.run: got channel: %s", conn)
 
 	if _, err := ch.QueueDeclare(s.queue, true, false, false, false, nil); err != nil {
@@ -143,7 +146,7 @@ func (s *AmqpSubscriber) run() error {
 		subscription.workQueue = make(chan amqp.Delivery)
 
 		// TODO: Determine an ideal worker pool
-		for i := 0; i <= 20; i++ {
+		for i := 0; i <= MAX_WORKERS; i++ {
 			go subscriptionWorker(subscription, subscription.workQueue)
 		}
 	}
