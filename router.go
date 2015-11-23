@@ -9,11 +9,13 @@ import (
 type Router interface {
 	Route(request *Request) (chan *Request, chan interface{})
 	RouteWithTimeout(request *Request, timeout time.Duration) (chan *Request, chan interface{})
+	SetHeartbeatTimeout(heartbeatTimeout time.Duration)
 }
 
 type StandardRouter struct {
-	publisher  Publisher
-	subscriber Subscriber
+	publisher        Publisher
+	subscriber       Subscriber
+	heartbeatTimeout time.Duration
 
 	topic string
 
@@ -60,7 +62,7 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 					return
 				}
 
-			case <-time.After(time.Second):
+			case <-time.After(sr.heartbeatTimeout):
 				streamTimeout <- nil
 
 				return
@@ -70,7 +72,7 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 
 	parsedUri, err := url.Parse(request.Routing.RouteTo[0].GetUri())
 	if err != nil {
-		logger.Fatalf("[StandardRouter.Route] %s - failed to parse route to uri: %s", request.GetUuid(), err)
+		logger.Fatalf("[StandardRouter.Route] %s - Failed to parse route to uri: %s", request.GetUuid(), err)
 	}
 
 	if err := sr.publisher.Publish(parsedUri.Scheme+"-"+parsedUri.Path, payload); err != nil {
@@ -90,6 +92,10 @@ func (sr *StandardRouter) RouteWithTimeout(request *Request, timeout time.Durati
 	return responses, streamTimeout
 }
 
+func (sr *StandardRouter) SetHeartbeatTimeout(heartbeatTimeout time.Duration) {
+	sr.heartbeatTimeout = heartbeatTimeout
+}
+
 func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 	logger.Printf("[NewStandardRouter] creating a new standard router.")
 	logger.Printf("[NewStandardRouter] using publisher: %#v", publisher)
@@ -98,6 +104,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 	router := &StandardRouter{
 		publisher:        publisher,
 		subscriber:       subscriber,
+		heartbeatTimeout: time.Second,
 		topic:            "router-" + CreateUUID(),
 		pendingResponses: map[string]chan *Request{},
 	}
