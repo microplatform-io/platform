@@ -98,6 +98,7 @@ type AmqpSubscriber struct {
 	connectionManager *AmqpConnectionManager
 	queue             string
 	subscriptions     []*subscription
+	exclusive         bool
 }
 
 func (s *AmqpSubscriber) Run() error {
@@ -130,12 +131,20 @@ func (s *AmqpSubscriber) run() error {
 
 	logger.Printf("> AmqpSubscriber.run: got channel: %s", conn)
 
-	if _, err := ch.QueueDeclare(s.queue, true, false, false, false, nil); err != nil {
+	durable := true
+	autoDelete := false
+
+	if s.exclusive {
+		durable = false
+		autoDelete = true
+	}
+
+	if _, err := ch.QueueDeclare(s.queue, durable, autoDelete, false, false, nil); err != nil {
 		return err
 	}
 
 	for _, subscription := range s.subscriptions {
-		logger.Println("> binding subscription")
+		logger.Println("> binding", s.queue, "to", subscription.Topic)
 		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", false, nil); err != nil {
 			return err
 		}
@@ -149,13 +158,13 @@ func (s *AmqpSubscriber) run() error {
 	}
 
 	msgs, err := ch.Consume(
-		s.queue, // queue
-		"",      // consumer defined by server
-		false,   // auto-ack
-		false,   // exclusive
-		false,   // no-local
-		false,   // no-wait
-		nil,     // args
+		s.queue,     // queue
+		"",          // consumer defined by server
+		false,       // auto-ack
+		s.exclusive, // exclusive
+		false,       // no-local
+		false,       // no-wait
+		nil,         // args
 	)
 	if err != nil {
 		return err
@@ -201,6 +210,15 @@ func NewAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (
 	return &AmqpSubscriber{
 		connectionManager: connectionManager,
 		queue:             queue,
+		exclusive:         false,
+	}, nil
+}
+
+func NewExclusiveAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (*AmqpSubscriber, error) {
+	return &AmqpSubscriber{
+		connectionManager: connectionManager,
+		queue:             queue,
+		exclusive:         true,
 	}, nil
 }
 

@@ -39,7 +39,13 @@ func GetLogger(prefix string) *log.Logger {
 	return loggers[prefix]
 }
 
+var cachedIp string
+
 func GetMyIp() (string, error) {
+	if cachedIp != "" {
+		return cachedIp, nil
+	}
+
 	urls := []string{"http://ifconfig.me/ip", "http://curlmyip.com", "http://icanhazip.com"}
 	respChan := make(chan *http.Response)
 
@@ -59,7 +65,10 @@ func GetMyIp() (string, error) {
 		if err != nil {
 			return "", err
 		}
-		return strings.Trim(string(body), "\n "), nil
+
+		cachedIp = strings.Trim(string(body), "\n ")
+
+		return cachedIp, nil
 	case <-time.After(time.Second * 5):
 		return "", errors.New("Timed out trying to fetch ip address.")
 	}
