@@ -59,9 +59,6 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 			return nil
 		}
 
-		// Give it a chance to breathe
-		time.Sleep(10 * time.Millisecond)
-
 		p.resetChannel()
 	}
 
@@ -69,7 +66,7 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 }
 
 func (p *AmqpPublisher) resetChannel() error {
-	connection, err := p.connectionManager.GetConnection(false)
+	connection, err := p.connectionManager.GetConnection(true)
 	if err != nil {
 		return err
 	}
