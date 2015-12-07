@@ -17,22 +17,6 @@ type AmqpPublisher struct {
 	channel           *amqp.Channel
 }
 
-func subscriptionWorker(subscription *subscription, workQueue chan amqp.Delivery) {
-	for {
-		for work := range workQueue {
-			subscriberDoWork(subscription, work)
-		}
-	}
-}
-
-func subscriberDoWork(subscription *subscription, msg amqp.Delivery) {
-	incrementConsumedWorkCount()
-	subscription.Handler.HandleMessage(msg.Body)
-
-	msg.Ack(false)
-	decrementConsumedWorkCount()
-}
-
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 	if p.channel == nil {
 		if err := p.resetChannel(); err != nil {
@@ -86,9 +70,45 @@ func NewAmqpPublisher(connectionManager *AmqpConnectionManager) (*AmqpPublisher,
 }
 
 type subscription struct {
-	Topic     string
-	Handler   ConsumerHandler
-	workQueue chan amqp.Delivery
+	Topic   string
+	Handler ConsumerHandler
+	msgChan chan amqp.Delivery
+}
+
+func (s *subscription) canHandle(msg amqp.Delivery) bool {
+	if s.Topic == "" {
+		return true
+	}
+
+	return s.Topic == msg.RoutingKey
+}
+
+func (s *subscription) runWorker() {
+	for msg := range s.msgChan {
+		incrementConsumedWorkCount()
+
+		s.Handler.HandleMessage(msg.Body)
+		msg.Ack(false)
+
+		decrementConsumedWorkCount()
+	}
+}
+
+func newSubscription(topic string, handler ConsumerHandler) *subscription {
+	s := &subscription{
+		Topic:   topic,
+		Handler: handler,
+		msgChan: make(chan amqp.Delivery),
+	}
+
+	logger.Printf("[newSubscription] creating '%s' subscription worker pool", topic)
+
+	// TODO: Determine an ideal worker pool
+	for i := 0; i <= 20; i++ {
+		go s.runWorker()
+	}
+
+	return s
 }
 
 type AmqpSubscriber struct {
@@ -118,7 +138,7 @@ func (s *AmqpSubscriber) run() error {
 		return err
 	}
 
-	logger.Printf("> AmqpSubscriber.run: got connection: %s", conn)
+	logger.Printf("> AmqpSubscriber.run: got connection: %#v", conn)
 
 	ch, err := conn.Channel()
 	if err != nil {
@@ -126,7 +146,7 @@ func (s *AmqpSubscriber) run() error {
 	}
 	defer ch.Close()
 
-	logger.Printf("> AmqpSubscriber.run: got channel: %s", conn)
+	logger.Printf("> AmqpSubscriber.run: got channel")
 
 	durable := true
 	autoDelete := false
@@ -136,21 +156,14 @@ func (s *AmqpSubscriber) run() error {
 		autoDelete = true
 	}
 
-	if _, err := ch.QueueDeclare(s.queue, durable, autoDelete, false, false, nil); err != nil {
+	if _, err := ch.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, true, nil); err != nil {
 		return err
 	}
 
 	for _, subscription := range s.subscriptions {
 		logger.Println("> binding", s.queue, "to", subscription.Topic)
-		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", false, nil); err != nil {
+		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", true, nil); err != nil {
 			return err
-		}
-
-		subscription.workQueue = make(chan amqp.Delivery)
-
-		// TODO: Determine an ideal worker pool
-		for i := 0; i <= 20; i++ {
-			go subscriptionWorker(subscription, subscription.workQueue)
 		}
 	}
 
@@ -160,36 +173,54 @@ func (s *AmqpSubscriber) run() error {
 		false,       // auto-ack
 		s.exclusive, // exclusive
 		false,       // no-local
-		false,       // no-wait
+		true,        // no-wait
 		nil,         // args
 	)
 	if err != nil {
 		return err
 	}
 
-	for msg := range msgs {
-		if !stillConsuming && !strings.Contains(msg.RoutingKey, "router") {
-			logger.Println("Rejecting the message, because we are shutting down.")
-			msg.Reject(true)
-			continue
-		}
-		handled := false
+	iterate := true
 
-		for _, subscription := range s.subscriptions {
-			if subscription.Topic == "" || (subscription.Topic == msg.RoutingKey) {
+	connClosed := conn.NotifyClose(make(chan *amqp.Error))
+	chanClosed := ch.NotifyClose(make(chan *amqp.Error))
 
-				select {
-				case subscription.workQueue <- msg:
-					handled = true
+	for iterate {
+		select {
+		case msg := <-msgs:
+			if !stillConsuming && !strings.Contains(msg.RoutingKey, "router") {
+				logger.Println("Rejecting the message, because we are shutting down.")
+				msg.Reject(true)
+				continue
+			}
 
-				case <-time.After(500 * time.Millisecond):
-					// ignore
+			handled := false
+
+			for _, subscription := range s.subscriptions {
+				if subscription.canHandle(msg) {
+					select {
+					case subscription.msgChan <- msg:
+						handled = true
+
+					case <-time.After(500 * time.Millisecond):
+						// ignore
+					}
 				}
 			}
-		}
 
-		if !handled {
-			msg.Reject(true)
+			if !handled {
+				msg.Reject(true)
+			}
+
+		case <-connClosed:
+			logger.Println("[AmqpSubscriber.run] connection has been closed")
+
+			iterate = false
+
+		case <-chanClosed:
+			logger.Println("[AmqpSubscriber.run] channel has been closed")
+
+			iterate = false
 		}
 	}
 
@@ -197,10 +228,7 @@ func (s *AmqpSubscriber) run() error {
 }
 
 func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) {
-	s.subscriptions = append(s.subscriptions, &subscription{
-		Topic:   topic,
-		Handler: handler,
-	})
+	s.subscriptions = append(s.subscriptions, newSubscription(topic, handler))
 }
 
 func NewAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (*AmqpSubscriber, error) {
@@ -281,7 +309,7 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 
 	go func() {
 		for i := 0; i < 50; i++ {
-			logger.Printf("> attempting to connect: %s %#v", &amqpConnectionManager, amqpConnectionManager)
+			logger.Printf("> attempting to connect: %#v", amqpConnectionManager)
 
 			connection, err := amqp.Dial("amqp://" + amqpConnectionManager.user + ":" + amqpConnectionManager.pass + "@" + amqpConnectionManager.host + ":" + amqpConnectionManager.port + "/" + amqpConnectionManager.virtualHost)
 			if err != nil {
