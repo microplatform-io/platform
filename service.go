@@ -1,8 +1,11 @@
 package platform
 
 import (
+	"fmt"
 	"os"
 	"os/signal"
+	"runtime"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
@@ -101,6 +104,34 @@ func NewRequestHeartbeatCourier(parent ResponseSender, request *Request) *Reques
 	}
 }
 
+func identifyPanic() string {
+	var name, file string
+	var line int
+	var pc [16]uintptr
+
+	n := runtime.Callers(3, pc[:])
+	for _, pc := range pc[:n] {
+		fn := runtime.FuncForPC(pc)
+		if fn == nil {
+			continue
+		}
+		file, line = fn.FileLine(pc)
+		name = fn.Name()
+		if !strings.HasPrefix(name, "runtime.") {
+			break
+		}
+	}
+
+	switch {
+	case name != "":
+		return fmt.Sprintf("%v:%v", name, line)
+	case file != "":
+		return fmt.Sprintf("%v:%v", file, line)
+	}
+
+	return fmt.Sprintf("pc:%x", pc)
+}
+
 type Service struct {
 	publisher  Publisher
 	subscriber Subscriber
@@ -121,7 +152,27 @@ func (s *Service) AddHandler(path string, handler Handler) {
 			return nil
 		}
 
-		handler.Handle(NewRequestHeartbeatCourier(s.courier, request), request)
+		requestHeartbeatCourier := NewRequestHeartbeatCourier(s.courier, request)
+
+		if Getenv("PLATFORM_PREVENT_PANICS", "1") == "1" {
+			defer func() {
+				if r := recover(); r != nil {
+					panicErrorBytes, _ := Marshal(&Error{
+						Message: String(fmt.Sprintf("A fatal error has occurred. %s: %s %s", path, identifyPanic(), r)),
+					})
+
+					requestHeartbeatCourier.Send(GenerateResponse(request, &Request{
+						Routing:   RouteToUri("resource:///platform/reply/error"),
+						Payload:   panicErrorBytes,
+						Completed: Bool(true),
+					}))
+
+					s.publisher.Publish("panic."+path, p)
+				}
+			}()
+		}
+
+		handler.Handle(requestHeartbeatCourier, request)
 
 		return nil
 	}))
@@ -164,6 +215,7 @@ func (s *Service) Run() {
 func NewService(serviceName string, publisher Publisher, subscriber Subscriber) (*Service, error) {
 	return &Service{
 		subscriber: subscriber,
+		publisher:  publisher,
 		courier:    NewCourier(publisher),
 		name:       serviceName,
 	}, nil
