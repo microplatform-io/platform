@@ -162,13 +162,13 @@ func (s *AmqpSubscriber) run() error {
 		autoDelete = true
 	}
 
-	if _, err := ch.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, true, nil); err != nil {
+	if _, err := ch.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, false, nil); err != nil {
 		return err
 	}
 
 	for _, subscription := range s.subscriptions {
 		logger.Println("> binding", s.queue, "to", subscription.Topic)
-		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", true, nil); err != nil {
+		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", false, nil); err != nil {
 			return err
 		}
 	}
@@ -179,7 +179,7 @@ func (s *AmqpSubscriber) run() error {
 		false,       // auto-ack
 		s.exclusive, // exclusive
 		false,       // no-local
-		true,        // no-wait
+		false,       // no-wait
 		nil,         // args
 	)
 	if err != nil {
