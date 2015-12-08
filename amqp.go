@@ -19,6 +19,7 @@ type AmqpPublisher struct {
 
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 	if p.channel == nil {
+		logger.Printf("CHANNEL IS :", p.channel)
 		if err := p.resetChannel(); err != nil {
 			return err
 		}
@@ -40,9 +41,14 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 			},
 		)
 		if publishErr == nil {
+			logger.Printf("[amqp] > published for %s", topic)
 			return nil
 		}
 
+		logger.Printf("[amqp] > Error publishing for %s - %s", topic, publishErr.Error())
+		//if we have to reset the channnel, its because of an error so lets always get a new channel
+		//by having connection.close() we should immediently try to reconnect
+		p.connectionManager.CloseConnection()
 		p.resetChannel()
 	}
 
@@ -224,6 +230,7 @@ func (s *AmqpSubscriber) run() error {
 		}
 	}
 
+	s.connectionManager.CloseConnection()
 	return errors.New("connection has been closed")
 }
 
@@ -308,6 +315,7 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 	}
 
 	go func() {
+
 		for i := 0; i < 50; i++ {
 			logger.Printf("> attempting to connect: %#v", amqpConnectionManager)
 
@@ -324,6 +332,9 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 			close(amqpConnectionManager.connectionUpdate)
 
 			<-connection.NotifyClose(make(chan *amqp.Error, 0))
+			logger.Println("Our connection has been broken, attempting to reconnect")
+
+			// panic("HAD TO RECONNECT")
 
 			// Reset i to attempt to reconnect 50 times again
 			i = 0
@@ -340,4 +351,14 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 	}()
 
 	return amqpConnectionManager
+}
+
+//this should shoot off our reconnecting logic when the connection recieves the close signal
+func (cm *AmqpConnectionManager) CloseConnection() {
+
+	if cm.connection != nil && cm.isConnected && !cm.isReconnecting {
+		cm.isConnected = false
+		cm.isReconnecting = true
+		cm.connection.Close()
+	}
 }
