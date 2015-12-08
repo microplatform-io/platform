@@ -34,7 +34,7 @@ type Consumer interface {
 }
 
 type ConsumerHandler interface {
-	HandleMessage([]byte) error
+	HandleMessage(body []byte) error
 }
 
 type ConsumerHandlerFunc func([]byte) error

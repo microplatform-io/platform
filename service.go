@@ -12,11 +12,12 @@ import (
 )
 
 var (
-	logger                 = GetLogger("platform")
-	serviceToken           = os.Getenv("SERVICE_TOKEN")
-	stillConsuming         bool
-	consumedWorkCount      int
-	consumedWorkCountMutex *sync.Mutex
+	logger                  = GetLogger("platform")
+	serviceToken            = os.Getenv("SERVICE_TOKEN")
+	stillConsuming          bool
+	consumedWorkCount       int
+	consumedWorkCountMutex  *sync.Mutex
+	PREVENT_PLATFORM_PANICS = Getenv("PLATFORM_PREVENT_PANICS", "1") == "1"
 )
 
 type Courier struct {
@@ -142,11 +143,11 @@ type Service struct {
 func (s *Service) AddHandler(path string, handler Handler) {
 	logger.Println("[Service.AddHandler] adding handler", path)
 
-	s.subscriber.Subscribe("microservice-"+path, ConsumerHandlerFunc(func(p []byte) error {
+	s.subscriber.Subscribe("microservice-"+path, ConsumerHandlerFunc(func(body []byte) error {
 		logger.Printf("[Service.Subscriber] handling %s request", path)
 
 		request := &Request{}
-		if err := Unmarshal(p, request); err != nil {
+		if err := Unmarshal(body, request); err != nil {
 			logger.Println("[Service.Subscriber] failed to decode request")
 
 			return nil
@@ -154,7 +155,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 
 		requestHeartbeatCourier := NewRequestHeartbeatCourier(s.courier, request)
 
-		if Getenv("PLATFORM_PREVENT_PANICS", "1") == "1" {
+		if PREVENT_PLATFORM_PANICS {
 			defer func() {
 				if r := recover(); r != nil {
 					panicErrorBytes, _ := Marshal(&Error{
@@ -167,7 +168,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 						Completed: Bool(true),
 					}))
 
-					s.publisher.Publish("panic."+path, p)
+					s.publisher.Publish("panic.handler."+path, body)
 				}
 			}()
 		}
@@ -179,7 +180,17 @@ func (s *Service) AddHandler(path string, handler Handler) {
 }
 
 func (s *Service) AddListener(topic string, handler ConsumerHandler) {
-	s.subscriber.Subscribe(topic, handler)
+	s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(body []byte) error {
+		if PREVENT_PLATFORM_PANICS {
+			defer func() {
+				if r := recover(); r != nil {
+					s.publisher.Publish("panic.listener."+topic, body)
+				}
+			}()
+		}
+
+		return handler.HandleMessage(body)
+	}))
 }
 
 func (s *Service) Run() {
