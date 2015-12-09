@@ -4,6 +4,7 @@ import (
 	"errors"
 	"net"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/streadway/amqp"
@@ -267,6 +268,7 @@ type AmqpConnectionManager struct {
 	virtualHost string
 
 	connection       *amqp.Connection
+	connectionMutex  *sync.Mutex
 	isConnected      bool
 	isReconnecting   bool
 	connectionUpdate chan bool
@@ -310,6 +312,7 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 		virtualHost: virtualHost,
 
 		connection:       nil,
+		connectionMutex:  &sync.Mutex{},
 		isConnected:      false,
 		isReconnecting:   true,
 		connectionUpdate: make(chan bool),
@@ -368,7 +371,10 @@ func (cm *AmqpConnectionManager) CloseConnection() {
 	if cm.connection != nil && cm.isConnected && !cm.isReconnecting {
 		cm.isConnected = false
 		cm.isReconnecting = true
+
+		cm.connectionMutex.Lock()
 		cm.connection.Close()
+		cm.connectionMutex.Unlock()
 
 		logger.Println("[AmqpConnectionManager.CloseConnection] We have manually closed the connection.")
 	} else {
