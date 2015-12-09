@@ -239,8 +239,7 @@ func (s *AmqpSubscriber) run() error {
 
 	s.connectionManager.CloseConnection()
 	logger.Println("AFTER ATTEMPTING TO CLOSE CONNECTION, LETS ERROR OUT")
-	// return errors.New("connection has been closed")
-	return s.run()
+	return errors.New("connection has been closed")
 }
 
 func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) {
@@ -335,7 +334,10 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 		for i := 0; i < 50; i++ {
 			logger.Printf("> attempting to connect: %#v", amqpConnectionManager)
 
-			connection, err := amqp.Dial("amqp://" + amqpConnectionManager.user + ":" + amqpConnectionManager.pass + "@" + amqpConnectionManager.host + ":" + amqpConnectionManager.port + "/" + amqpConnectionManager.virtualHost)
+			connection, err := amqp.DialConfig("amqp://"+amqpConnectionManager.user+":"+amqpConnectionManager.pass+"@"+amqpConnectionManager.host+":"+amqpConnectionManager.port+"/"+amqpConnectionManager.virtualHost, amqp.Config{
+				Heartbeat: 0 * time.Second,
+			})
+			//connection, err := amqp.Dial("amqp://" + amqpConnectionManager.user + ":" + amqpConnectionManager.pass + "@" + amqpConnectionManager.host + ":" + amqpConnectionManager.port + "/" + amqpConnectionManager.virtualHost)
 			if err != nil {
 				logger.Println("> failed to connect:", err)
 				time.Sleep(time.Duration((i%5)+1) * time.Second)
