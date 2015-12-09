@@ -125,12 +125,13 @@ type AmqpSubscriber struct {
 }
 
 func (s *AmqpSubscriber) Run() error {
-	logger.Printf("> AmqpSubscriber.Run: initiating")
+	logger.Printf("[AmqpSubscriber.run] initiating")
 
 	for {
 		if err := s.run(); err != nil {
-			logger.Printf("> failed to run subscription: %s", err)
+			logger.Printf("[AmqpSubscriber.run] failed to run subscription: %s", err)
 		}
+		logger.Println("[AmqpSubscriber.run] Attempting to run again.")
 	}
 
 	return nil
@@ -316,6 +317,11 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 
 	go func() {
 
+		// go func(am *AmqpConnectionManager) {
+		// 	time.Sleep(10100 * time.Millisecond)
+		// 	am.connection.Close()
+		// }(amqpConnectionManager)
+
 		for i := 0; i < 50; i++ {
 			logger.Printf("> attempting to connect: %#v", amqpConnectionManager)
 
@@ -325,6 +331,8 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 				time.Sleep(time.Duration((i%5)+1) * time.Second)
 				continue
 			}
+
+			logger.Println("We now have a connection, we should rebind now!")
 
 			amqpConnectionManager.connection = connection
 			amqpConnectionManager.isConnected = true
@@ -355,10 +363,15 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 
 //this should shoot off our reconnecting logic when the connection recieves the close signal
 func (cm *AmqpConnectionManager) CloseConnection() {
+	logger.Println("[AmqpConnectionManager.CloseConnection] We are attempting to manually close the connection.")
 
 	if cm.connection != nil && cm.isConnected && !cm.isReconnecting {
 		cm.isConnected = false
 		cm.isReconnecting = true
 		cm.connection.Close()
+
+		logger.Println("[AmqpConnectionManager.CloseConnection] We have manually closed the connection.")
+	} else {
+		logger.Println("[AmqpConnectionManager.CloseConnection] We cannot close a disconnection connection.")
 	}
 }
