@@ -168,12 +168,15 @@ func (s *AmqpSubscriber) run() error {
 		return err
 	}
 
+	logger.Println("[AmqpSubscriber.run] Attempting to bind these subscriptions : ", s.subscriptions)
 	for _, subscription := range s.subscriptions {
 		logger.Println("> binding", s.queue, "to", subscription.Topic)
 		if err := ch.QueueBind(s.queue, subscription.Topic, "amq.topic", false, nil); err != nil {
 			return err
 		}
 	}
+
+	logger.Println("[AmqpSubscriber.run] After finished binding")
 
 	msgs, err := ch.Consume(
 		s.queue,     // queue
@@ -224,16 +227,20 @@ func (s *AmqpSubscriber) run() error {
 			logger.Println("[AmqpSubscriber.run] connection has been closed")
 
 			iterate = false
+			logger.Printf("AFTER ITERATE = FALSE : %t", iterate)
 
 		case <-chanClosed:
 			logger.Println("[AmqpSubscriber.run] channel has been closed")
 
 			iterate = false
+			logger.Printf("AFTER ITERATE = FALSE : %t", iterate)
 		}
 	}
 
 	s.connectionManager.CloseConnection()
-	return errors.New("connection has been closed")
+	logger.Println("AFTER ATTEMPTING TO CLOSE CONNECTION, LETS ERROR OUT")
+	// return errors.New("connection has been closed")
+	return s.run()
 }
 
 func (s *AmqpSubscriber) Subscribe(topic string, handler ConsumerHandler) {
