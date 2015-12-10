@@ -26,7 +26,7 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 		}
 	}
 
-	logger.Printf("[amqp] > publishing for %s", topic)
+	logger.Printf("[AmqpPublisher.Publish] Publishing for %s", topic)
 
 	var publishErr error
 
@@ -42,13 +42,12 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 			},
 		)
 		if publishErr == nil {
-			logger.Printf("[amqp] > published for %s", topic)
+			logger.Printf("[AmqpPublisher.Publish] Published for %s", topic)
 			return nil
 		}
 
-		logger.Printf("[amqp] > Error publishing for %s - %s", topic, publishErr.Error())
+		logger.Printf("[AmqpPublisher.Publish] Error publishing for %s - %s", topic, publishErr.Error())
 		//if we have to reset the channnel, its because of an error so lets always get a new channel
-		//by having connection.close() we should immediently try to reconnect
 		p.connectionManager.CloseConnection()
 		p.resetChannel()
 	}
@@ -126,35 +125,37 @@ type AmqpSubscriber struct {
 }
 
 func (s *AmqpSubscriber) Run() error {
-	logger.Printf("[AmqpSubscriber.run] initiating")
+	logger.Printf("[AmqpSubscriber.Run] initiating")
 
 	for {
+		logger.Println("[AmqpSubscriber.Run] Attempting to run subscription.")
 		if err := s.run(); err != nil {
-			logger.Printf("[AmqpSubscriber.run] failed to run subscription: %s", err)
+			logger.Printf("[AmqpSubscriber.Run] failed to run subscription: %s", err)
 		}
-		logger.Println("[AmqpSubscriber.run] Attempting to run again.")
 	}
 
 	return nil
 }
 
 func (s *AmqpSubscriber) run() error {
-	logger.Printf("> AmqpSubscriber.run: grabbing connection")
+	logger.Printf("[AmqpSubscriber.run] grabbing connection")
 
 	conn, err := s.connectionManager.GetConnection(true)
 	if err != nil {
 		return err
 	}
 
-	logger.Printf("> AmqpSubscriber.run: got connection: %#v", conn)
+	logger.Printf("[AmqpSubscriber.run] got connection: %#v", conn)
 
 	ch, err := conn.Channel()
 	if err != nil {
 		return err
 	}
-	defer ch.Close()
+	// defer ch.Close()
+	// No need to close the channel if the connection is closed.
+	defer s.connectionManager.CloseConnection()
 
-	logger.Printf("> AmqpSubscriber.run: got channel")
+	logger.Printf("[AmqpSubscriber.run] got channel")
 
 	durable := true
 	autoDelete := false
@@ -225,20 +226,14 @@ func (s *AmqpSubscriber) run() error {
 
 		case <-connClosed:
 			logger.Println("[AmqpSubscriber.run] connection has been closed")
-
 			iterate = false
-			logger.Printf("AFTER ITERATE = FALSE : %t", iterate)
 
 		case <-chanClosed:
 			logger.Println("[AmqpSubscriber.run] channel has been closed")
-
 			iterate = false
-			logger.Printf("AFTER ITERATE = FALSE : %t", iterate)
 		}
 	}
 
-	s.connectionManager.CloseConnection()
-	logger.Println("AFTER ATTEMPTING TO CLOSE CONNECTION, LETS ERROR OUT")
 	return errors.New("connection has been closed")
 }
 
@@ -290,7 +285,6 @@ func (cm *AmqpConnectionManager) GetConnection(block bool) (*amqp.Connection, er
 	if cm.isReconnecting {
 		if block {
 			<-cm.connectionUpdate
-
 			return cm.GetConnection(block)
 		} else {
 			return nil, errors.New("connection is being reconnected")
@@ -326,25 +320,21 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 
 	go func() {
 
-		// go func(am *AmqpConnectionManager) {
-		// 	time.Sleep(10100 * time.Millisecond)
-		// 	am.connection.Close()
-		// }(amqpConnectionManager)
-
 		for i := 0; i < 50; i++ {
 			logger.Printf("> attempting to connect: %#v", amqpConnectionManager)
+			time.Sleep(1 * time.Second)
 
-			connection, err := amqp.DialConfig("amqp://"+amqpConnectionManager.user+":"+amqpConnectionManager.pass+"@"+amqpConnectionManager.host+":"+amqpConnectionManager.port+"/"+amqpConnectionManager.virtualHost, amqp.Config{
-				Heartbeat: 0 * time.Second,
-			})
-			//connection, err := amqp.Dial("amqp://" + amqpConnectionManager.user + ":" + amqpConnectionManager.pass + "@" + amqpConnectionManager.host + ":" + amqpConnectionManager.port + "/" + amqpConnectionManager.virtualHost)
+			// connection, err := amqp.DialConfig("amqp://"+amqpConnectionManager.user+":"+amqpConnectionManager.pass+"@"+amqpConnectionManager.host+":"+amqpConnectionManager.port+"/"+amqpConnectionManager.virtualHost, amqp.Config{
+			// 	Heartbeat: 0 * time.Second,
+			// })
+			connection, err := amqp.Dial("amqp://" + amqpConnectionManager.user + ":" + amqpConnectionManager.pass + "@" + amqpConnectionManager.host + ":" + amqpConnectionManager.port + "/" + amqpConnectionManager.virtualHost)
 			if err != nil {
 				logger.Println("> failed to connect:", err)
 				time.Sleep(time.Duration((i%5)+1) * time.Second)
 				continue
 			}
 
-			logger.Println("We now have a connection, we should rebind now!")
+			logger.Println("[AmqpConnectionManager.ConnectionLoop] We are now connected.")
 
 			amqpConnectionManager.connection = connection
 			amqpConnectionManager.isConnected = true
@@ -352,9 +342,7 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 			close(amqpConnectionManager.connectionUpdate)
 
 			<-connection.NotifyClose(make(chan *amqp.Error, 0))
-			logger.Println("Our connection has been broken, attempting to reconnect")
-
-			// panic("HAD TO RECONNECT")
+			logger.Println("[AmqpConnectionManager.ConnectionLoop] Connection has been broken, attempting to reconnect")
 
 			// Reset i to attempt to reconnect 50 times again
 			i = 0
@@ -377,16 +365,15 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 func (cm *AmqpConnectionManager) CloseConnection() {
 	logger.Println("[AmqpConnectionManager.CloseConnection] We are attempting to manually close the connection.")
 
+	cm.connectionMutex.Lock()
+	defer cm.connectionMutex.Unlock()
+
 	if cm.connection != nil && cm.isConnected && !cm.isReconnecting {
+		//by saying that its no longer connected, we just just always fetch a new channel
 		cm.isConnected = false
 		cm.isReconnecting = true
-
-		cm.connectionMutex.Lock()
-		cm.connection.Close()
-		cm.connectionMutex.Unlock()
-
 		logger.Println("[AmqpConnectionManager.CloseConnection] We have manually closed the connection.")
 	} else {
-		logger.Println("[AmqpConnectionManager.CloseConnection] We cannot close a disconnection connection.")
+		logger.Println("[AmqpConnectionManager.CloseConnection] We cannot close a disconnected connection.")
 	}
 }
