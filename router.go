@@ -128,7 +128,8 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 			select {
 			case responses <- response:
 				logger.Printf("[StandardRouter.Subscriber] reply chan was available")
-			default:
+			
+			case <-time.After(250 * time.Millisecond):
 				logger.Printf("[StandardRouter.Subscriber] reply chan was not available")
 			}
 
