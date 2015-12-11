@@ -17,7 +17,7 @@ var (
 )
 
 const PUBLISH_RETRIES = 3
-const MAX_WORKERS = 20
+const MAX_WORKERS = 50
 
 type AmqpChannel struct {
 	channel           *amqp.Channel
@@ -25,108 +25,89 @@ type AmqpChannel struct {
 	connectionManager *AmqpConnectionManager
 	name              string
 	isActive          bool
-	closeChan         chan *amqp.Error
+	isUpdated         chan bool
 }
 
 func NewAmqpChannel(connectionManager *AmqpConnectionManager, name string) *AmqpChannel {
-	return &AmqpChannel{
+	channel := &AmqpChannel{
 		connectionManager: connectionManager,
 		name:              name,
 		channelMutex:      &sync.Mutex{},
-		closeChan:         make(chan *amqp.Error),
 		isActive:          false,
+		isUpdated:         make(chan bool),
 	}
+
+	channel.resetChannel()
+	go channel.keepAlive()
+
+	return channel
+}
+
+// A safe bet at closing the channel
+func (ch *AmqpChannel) Close() error {
+	ch.channelMutex.Lock()
+	defer ch.channelMutex.Unlock()
+
+	ch.isActive = false
+
+	return ch.channel.Close()
+}
+
+func (ch *AmqpChannel) NotifyClose() chan *amqp.Error {
+	return ch.channel.NotifyClose(make(chan *amqp.Error))
+}
+
+// If the channel is not active, we will block until we have an active one.
+func (ch *AmqpChannel) getChannel() *amqp.Channel {
+	if !ch.isActive {
+		<-ch.isUpdated
+	}
+
+	return ch.channel
 }
 
 // The amqpChannel keepAlive handles the persistence of a single channels state.
-// If a connection needs to be reset, we will wait for the connection to reconnect and settle
-// and then we will recreate a channel, if a channel recieves a close signal we will close our existing
-// channel and create a new one.
+// If a channel recieves a close signal we will close our existing channel and create a new one.
 func (ch *AmqpChannel) keepAlive() error {
-	connClosed := ch.connectionManager.connection.NotifyClose(make(chan *amqp.Error))
-	chanClosed := ch.channel.NotifyClose(make(chan *amqp.Error))
-
 	for {
-
 		select {
-		case amqpError := <-connClosed:
-			ch.channelMutex.Lock()
-			ch.isActive = false
-			ch.channelMutex.Unlock()
-
-			logger.Printf("[AmqpChannel.keepAlive] %s - channel connection close signal recieved : %v", ch.name, amqpError)
-
-			//Wait a bit so we dont have to close the connection ourself. We also do this so we don't try to close
-			//the connection right after its been reconnected, or try to create a channel with a stale connection.
-			//We let the connection routine do its job
-			time.Sleep(50 * time.Millisecond)
-
-			//reset channel handles waiting for the connection now
-			if err := ch.resetChannel(); err != nil {
-				logger.Println("[AmqpChannel.keepAlive] Failed to reset channel after connection reset : ", err)
-				ch.closeChan <- amqpError
-				return err
-			}
-
-			logger.Printf("[AmqpChannel.keepAlive] %s - channel connection has reconnected", ch.name)
-
-		case amqpError := <-chanClosed:
-			ch.channelMutex.Lock()
-			ch.isActive = false
-			ch.channelMutex.Unlock()
-
+		case amqpError := <-ch.NotifyClose():
 			logger.Printf("[AmqpChannel.keepAlive] %s - channel close signal recieved : %v", ch.name, amqpError)
 
-			if ch.channel != nil {
-				logger.Printf("[AmqpChannel.keepAlive] %s - channel is being hard closed.", ch.name)
-				ch.channel.Close()
-				logger.Printf("[AmqpChannel.keepAlive] %s - channel has being hard closed.", ch.name)
-			}
+			logger.Printf("[AmqpChannel.keepAlive] %s - channel is being hard closed.", ch.name)
+			ch.Close()
+			logger.Printf("[AmqpChannel.keepAlive] %s - channel has being hard closed.", ch.name)
 
-			if err := ch.resetChannel(); err != nil {
-				logger.Println("[AmqpChannel.keepAlive] Failed to reset channel : ", err)
-				return err
-			}
+			ch.resetChannel()
 
 			logger.Printf("[AmqpChannel.keepAlive] %s - channel has reconnected.", ch.name)
-
-		default:
-			continue
 		}
-
-		connClosed = ch.connectionManager.connection.NotifyClose(make(chan *amqp.Error))
-		chanClosed = ch.channel.NotifyClose(make(chan *amqp.Error))
 	}
 
 	return nil
 }
 
-func (amqpChannel *AmqpChannel) resetChannel() error {
-	if amqpChannel.connectionManager.connection == nil || !amqpChannel.connectionManager.isConnected || !amqpChannel.connectionManager.isReconnecting {
-		logger.Printf("[AmqpChannel.resetChannel] updating connection")
+func (ch *AmqpChannel) resetChannel() {
+	ch.channelMutex.Lock()
+	ch.isActive = false
+	ch.channelMutex.Unlock()
 
-		connection, err := amqpChannel.connectionManager.GetConnection(true)
+	for !ch.isActive {
+		ch.channelMutex.Lock()
+
+		channel, err := ch.connectionManager.GetChannel()
 		if err != nil {
-			logger.Println("[AmqpChannel.resetChannel] Failed to get connection : ", err)
-			return err
+			logger.Println("[AmqpChannel.resetChannel] Failed to get channel : ", err)
+			ch.channelMutex.Unlock()
+			continue
 		}
-		amqpChannel.connectionManager.connectionMutex.Lock()
-		amqpChannel.connectionManager.connection = connection
-		amqpChannel.connectionManager.connectionMutex.Unlock()
-	}
 
-	channel, err := amqpChannel.connectionManager.connection.Channel()
-	if err != nil {
-		logger.Println("[AmqpChannel.resetChannel] Failed to get channel : ", err)
-		return err
+		ch.channel = channel
+		ch.isActive = true
+		close(ch.isUpdated)
+		ch.isUpdated = make(chan bool)
+		ch.channelMutex.Unlock()
 	}
-
-	amqpChannel.channelMutex.Lock()
-	amqpChannel.channel = channel
-	amqpChannel.isActive = true
-	amqpChannel.closeChan = make(chan *amqp.Error)
-	amqpChannel.channelMutex.Unlock()
-	return nil
 }
 
 type AmqpPublisher struct {
@@ -134,13 +115,6 @@ type AmqpPublisher struct {
 }
 
 func (p *AmqpPublisher) Publish(topic string, body []byte) error {
-	if p.amqpChannel.channel == nil {
-		logger.Printf("CHANNEL IS :", p.amqpChannel.channel)
-		if err := p.amqpChannel.resetChannel(); err != nil {
-			return err
-		}
-	}
-
 	logger.Printf("[AmqpPublisher.Publish] Publishing for %s", topic)
 
 	var publishErr error
@@ -162,6 +136,7 @@ func (p *AmqpPublisher) Publish(topic string, body []byte) error {
 
 		logger.Printf("[AmqpPublisher.Publish] Error publishing for %s - %s", topic, publishErr.Error())
 		//if we have to reset the channnel, its because of an error so lets always get a new channel
+
 		p.amqpChannel.resetChannel()
 	}
 
@@ -174,13 +149,6 @@ func NewAmqpPublisher(connectionManager *AmqpConnectionManager) (*AmqpPublisher,
 	}
 
 	internalPublisherCount = internalPublisherCount + 1
-
-	//this will get us a channel before we start listening
-	if err := publisher.amqpChannel.resetChannel(); err != nil {
-		return nil, err
-	}
-
-	go publisher.amqpChannel.keepAlive()
 
 	return publisher, nil
 }
@@ -220,7 +188,7 @@ func newSubscription(topic string, handler ConsumerHandler) *subscription {
 	logger.Printf("[newSubscription] creating '%s' subscription worker pool", topic)
 
 	// TODO: Determine an ideal worker pool
-	for i := 0; i <= 20; i++ {
+	for i := 0; i <= MAX_WORKERS; i++ {
 		go s.runWorker()
 	}
 
@@ -231,6 +199,7 @@ type AmqpSubscriber struct {
 	queue         string
 	subscriptions []*subscription
 	exclusive     bool
+	autoDelete    bool
 	amqpChannel   *AmqpChannel
 }
 
@@ -238,16 +207,6 @@ func (s *AmqpSubscriber) Run() error {
 	logger.Printf("[AmqpSubscriber.Run] initiating")
 
 	for {
-		_, err := s.amqpChannel.connectionManager.GetConnection(true)
-		if err != nil {
-			logger.Printf("[AmqpSubscriber.Run] failed to get connection: %s", err)
-			continue
-		}
-
-		if !s.amqpChannel.isActive {
-			continue
-		}
-
 		logger.Println("[AmqpSubscriber.Run] Attempting to run subscription.")
 		if err := s.run(); err != nil {
 			logger.Printf("[AmqpSubscriber.Run] failed to run subscription: %s", err)
@@ -257,29 +216,36 @@ func (s *AmqpSubscriber) Run() error {
 	return nil
 }
 
+// Our running of the actual subscriber, where we declare and bind based on the notion of the
+// subscriber and handles the messages. If we recieve a signal that the channel is closed
+// we will break out and wait for a new connection.
 func (s *AmqpSubscriber) run() error {
+	channel := s.amqpChannel.getChannel()
 	durable := true
 	autoDelete := false
 
 	if s.exclusive {
 		durable = false
+	}
+
+	if s.autoDelete {
 		autoDelete = true
 	}
 
-	if _, err := s.amqpChannel.channel.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, true, nil); err != nil {
+	if _, err := channel.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, true, nil); err != nil {
 		return err
 	}
 
 	for _, subscription := range s.subscriptions {
 		logger.Println("> binding", s.queue, "to", subscription.Topic)
-		if err := s.amqpChannel.channel.QueueBind(s.queue, subscription.Topic, "amq.topic", true, nil); err != nil {
+		if err := channel.QueueBind(s.queue, subscription.Topic, "amq.topic", true, nil); err != nil {
 			return err
 		}
 	}
 
 	logger.Println("[AmqpSubscriber.run] After finished binding")
 
-	msgs, err := s.amqpChannel.channel.Consume(
+	msgs, err := channel.Consume(
 		s.queue,     // queue
 		"",          // consumer defined by server
 		false,       // auto-ack
@@ -293,6 +259,8 @@ func (s *AmqpSubscriber) run() error {
 	}
 
 	iterate := true
+
+	closeChan := s.amqpChannel.NotifyClose()
 
 	for iterate {
 		select {
@@ -321,8 +289,8 @@ func (s *AmqpSubscriber) run() error {
 				msg.Reject(true)
 			}
 
-		case closeChan := <-s.amqpChannel.closeChan:
-			logger.Println("[AmqpSubscriber.run] An event occurred causing the need for a new channel : ", closeChan)
+		case amqpError := <-closeChan:
+			logger.Println("[AmqpSubscriber.run] An event occurred causing the need for a new channel : ", amqpError)
 			iterate = false
 		}
 	}
@@ -338,18 +306,10 @@ func NewAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (
 	subscriber := &AmqpSubscriber{
 		queue:       queue,
 		exclusive:   false,
+		autoDelete:  false,
 		amqpChannel: NewAmqpChannel(connectionManager, fmt.Sprintf("subscriber#%d", internalSubscriberCount)),
 	}
-
 	internalSubscriberCount = internalSubscriberCount + 1
-
-	err := subscriber.amqpChannel.resetChannel()
-	if err != nil {
-		return nil, err
-	}
-
-	go subscriber.amqpChannel.keepAlive()
-
 	return subscriber, nil
 }
 
@@ -357,18 +317,21 @@ func NewExclusiveAmqpSubscriber(connectionManager *AmqpConnectionManager, queue 
 	subscriber := &AmqpSubscriber{
 		queue:       queue,
 		exclusive:   true,
+		autoDelete:  false,
 		amqpChannel: NewAmqpChannel(connectionManager, fmt.Sprintf("subscriber#%d", internalSubscriberCount)),
 	}
-
 	internalSubscriberCount = internalSubscriberCount + 1
+	return subscriber, nil
+}
 
-	err := subscriber.amqpChannel.resetChannel()
-	if err != nil {
-		return nil, err
+func NewAutoDeleteAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (*AmqpSubscriber, error) {
+	subscriber := &AmqpSubscriber{
+		queue:       queue,
+		exclusive:   false,
+		autoDelete:  true,
+		amqpChannel: NewAmqpChannel(connectionManager, fmt.Sprintf("subscriber#%d", internalSubscriberCount)),
 	}
-
-	go subscriber.amqpChannel.keepAlive()
-
+	internalSubscriberCount = internalSubscriberCount + 1
 	return subscriber, nil
 }
 
@@ -409,6 +372,18 @@ func (cm *AmqpConnectionManager) GetConnection(block bool) (*amqp.Connection, er
 	return nil, errors.New("connection is permanently disconnected")
 }
 
+// Returns a new channel from the current connection. We will block until we get a connection
+// and should bubble up the results of trying to obtain the channel.
+func (cm *AmqpConnectionManager) GetChannel() (*amqp.Channel, error) {
+	connection, err := cm.GetConnection(true)
+	if err != nil {
+		logger.Println("[AmqpConnectionManager.GetChannel] Failed to get connection : ", err)
+		return nil, err
+	}
+
+	return connection.Channel()
+}
+
 // Generate a new connection manager with all of the credentials needed to establish
 // an AMQP connection. Addr comes in the form of host:port, if no port is provided
 // then the standard port 5672 will be used
@@ -442,6 +417,7 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 			if err != nil {
 				logger.Println("> failed to connect:", err)
 				time.Sleep(time.Duration((i%5)+1) * time.Second)
+				amqpConnectionManager.connectionMutex.Unlock()
 				continue
 			}
 
@@ -473,23 +449,4 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 	}()
 
 	return amqpConnectionManager
-}
-
-//this should shoot off our reconnecting logic when the connection recieves the close signal
-func (cm *AmqpConnectionManager) CloseConnection() {
-	cm.connectionMutex.Lock()
-	defer cm.connectionMutex.Unlock()
-
-	//if we are already in bad state no need to move foward
-	if cm.connection == nil || !cm.isConnected || cm.isReconnecting {
-		return
-	}
-
-	logger.Println("[AmqpConnectionManager.CloseConnection] We are attempting to manually close the connection.")
-
-	//by saying that its no longer connected, we just just always fetch a new connection
-	cm.isConnected = false
-	cm.isReconnecting = true
-	logger.Println("[AmqpConnectionManager.CloseConnection] We have manually closed the connection.")
-
 }
