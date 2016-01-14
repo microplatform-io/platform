@@ -340,11 +340,7 @@ func NewAutoDeleteAmqpSubscriber(connectionManager *AmqpConnectionManager, queue
 // a helper function that resets the connection so that the subsequent connection
 // lookup will obtain a new connection.
 type AmqpConnectionManager struct {
-	user        string
-	pass        string
-	host        string
-	port        string
-	virtualHost string
+	endpoint string
 
 	connection       *amqp.Connection
 	connectionMutex  *sync.Mutex
@@ -384,6 +380,46 @@ func (cm *AmqpConnectionManager) GetChannel() (*amqp.Channel, error) {
 	return connection.Channel()
 }
 
+func (cm *AmqpConnectionManager) keepAlive() {
+	for i := 0; i < 50; i++ {
+		logger.Printf("> attempting to connect: %#v", cm)
+
+		cm.connectionMutex.Lock()
+		connection, err := amqp.Dial(cm.endpoint)
+		if err != nil {
+			logger.Println("> failed to connect:", err)
+			time.Sleep(time.Duration((i%5)+1) * time.Second)
+			cm.connectionMutex.Unlock()
+			continue
+		}
+
+		logger.Println("[AmqpConnectionManager.ConnectionLoop] We are now connected.")
+
+		cm.connection = connection
+		cm.isConnected = true
+		cm.isReconnecting = false
+		close(cm.connectionUpdate)
+
+		cm.connectionMutex.Unlock()
+
+		<-connection.NotifyClose(make(chan *amqp.Error, 0))
+		logger.Println("[AmqpConnectionManager.ConnectionLoop] Connection has been broken, attempting to reconnect")
+
+		// Reset i to attempt to reconnect 50 times again
+		i = 0
+		cm.connectionMutex.Lock()
+		cm.connection = nil
+		cm.isConnected = false
+		cm.isReconnecting = true
+		cm.connectionUpdate = make(chan bool)
+		cm.connectionMutex.Unlock()
+	}
+
+	// 50 attempts for a single connection have failed, mark as permanent failure
+	cm.isConnected = false
+	cm.isReconnecting = false
+}
+
 // Generate a new connection manager with all of the credentials needed to establish
 // an AMQP connection. Addr comes in the form of host:port, if no port is provided
 // then the standard port 5672 will be used
@@ -395,12 +431,7 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 	}
 
 	amqpConnectionManager := &AmqpConnectionManager{
-		user:        user,
-		pass:        pass,
-		host:        host,
-		port:        port,
-		virtualHost: virtualHost,
-
+		endpoint:         "amqp://" + user + ":" + pass + "@" + host + ":" + port + "/" + virtualHost,
 		connection:       nil,
 		connectionMutex:  &sync.Mutex{},
 		isConnected:      false,
@@ -408,45 +439,22 @@ func NewAmqpConnectionManager(user, pass, addr, virtualHost string) *AmqpConnect
 		connectionUpdate: make(chan bool),
 	}
 
-	go func() {
-		for i := 0; i < 50; i++ {
-			logger.Printf("> attempting to connect: %#v", amqpConnectionManager)
+	go amqpConnectionManager.keepAlive()
 
-			amqpConnectionManager.connectionMutex.Lock()
-			connection, err := amqp.Dial("amqp://" + amqpConnectionManager.user + ":" + amqpConnectionManager.pass + "@" + amqpConnectionManager.host + ":" + amqpConnectionManager.port + "/" + amqpConnectionManager.virtualHost)
-			if err != nil {
-				logger.Println("> failed to connect:", err)
-				time.Sleep(time.Duration((i%5)+1) * time.Second)
-				amqpConnectionManager.connectionMutex.Unlock()
-				continue
-			}
+	return amqpConnectionManager
+}
 
-			logger.Println("[AmqpConnectionManager.ConnectionLoop] We are now connected.")
+func NewAmqpConnectionManagerWithEndpoint(endpoint string) *AmqpConnectionManager {
+	amqpConnectionManager := &AmqpConnectionManager{
+		endpoint:         endpoint,
+		connection:       nil,
+		connectionMutex:  &sync.Mutex{},
+		isConnected:      false,
+		isReconnecting:   true,
+		connectionUpdate: make(chan bool),
+	}
 
-			amqpConnectionManager.connection = connection
-			amqpConnectionManager.isConnected = true
-			amqpConnectionManager.isReconnecting = false
-			close(amqpConnectionManager.connectionUpdate)
-
-			amqpConnectionManager.connectionMutex.Unlock()
-
-			<-connection.NotifyClose(make(chan *amqp.Error, 0))
-			logger.Println("[AmqpConnectionManager.ConnectionLoop] Connection has been broken, attempting to reconnect")
-
-			// Reset i to attempt to reconnect 50 times again
-			i = 0
-			amqpConnectionManager.connectionMutex.Lock()
-			amqpConnectionManager.connection = nil
-			amqpConnectionManager.isConnected = false
-			amqpConnectionManager.isReconnecting = true
-			amqpConnectionManager.connectionUpdate = make(chan bool)
-			amqpConnectionManager.connectionMutex.Unlock()
-		}
-
-		// 50 attempts for a single connection have failed, mark as permanent failure
-		amqpConnectionManager.isConnected = false
-		amqpConnectionManager.isReconnecting = false
-	}()
+	go amqpConnectionManager.keepAlive()
 
 	return amqpConnectionManager
 }
