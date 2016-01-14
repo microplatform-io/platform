@@ -96,22 +96,14 @@ func (sr *StandardRouter) SetHeartbeatTimeout(heartbeatTimeout time.Duration) {
 	sr.heartbeatTimeout = heartbeatTimeout
 }
 
-func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
+func (sr *StandardRouter) subscribe() {
 	logger.Printf("[NewStandardRouter] creating a new standard router.")
-	logger.Printf("[NewStandardRouter] using publisher: %#v", publisher)
-	logger.Printf("[NewStandardRouter] using subscriber: %#v", subscriber)
-
-	router := &StandardRouter{
-		publisher:        publisher,
-		subscriber:       subscriber,
-		heartbeatTimeout: time.Second,
-		topic:            "router-" + CreateUUID(),
-		pendingResponses: map[string]chan *Request{},
-	}
+	logger.Printf("[NewStandardRouter] using publisher: %#v", sr.publisher)
+	logger.Printf("[NewStandardRouter] using subscriber: %#v", sr.subscriber)
 
 	consumedWorkCountMutex = &sync.Mutex{}
 
-	subscriber.Subscribe(router.topic, ConsumerHandlerFunc(func(body []byte) error {
+	sr.subscriber.Subscribe(sr.topic, ConsumerHandlerFunc(func(body []byte) error {
 		logger.Println("[StandardRouter.Subscriber] receiving message for router")
 
 		response := &Request{}
@@ -123,12 +115,12 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 
 		logger.Printf("[StandardRouter.Subscriber] received response for router: %s", response)
 
-		router.mu.Lock()
-		if responses, exists := router.pendingResponses[response.GetUuid()]; exists {
+		sr.mu.Lock()
+		if responses, exists := sr.pendingResponses[response.GetUuid()]; exists {
 			select {
 			case responses <- response:
 				logger.Printf("[StandardRouter.Subscriber] reply chan was available")
-			
+
 			case <-time.After(250 * time.Millisecond):
 				logger.Printf("[StandardRouter.Subscriber] reply chan was not available")
 			}
@@ -136,31 +128,46 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 			if response.GetCompleted() {
 				logger.Printf("[StandardRouter.Subscriber] this was the last response, closing and deleting the responses chan")
 
-				delete(router.pendingResponses, response.GetUuid())
+				delete(sr.pendingResponses, response.GetUuid())
 				// close(responses)
 			}
 		}
-		router.mu.Unlock()
+		sr.mu.Unlock()
 
 		logger.Printf("[StandardRouter.Subscriber] completed routing response: %s", response)
 
 		return nil
 	}))
 
-	go func() {
-		for i := 0; i <= 100; i++ {
-			logger.Println("[StandardRouter.Subscriber] running subscriber...")
-			if err := subscriber.Run(); err != nil {
-				logger.Printf("[StandardRouter.Subscriber] subscriber has exited: %s", err)
-			}
+	go sr.subscriber.Run()
 
-			time.Sleep(time.Duration(i%5) * time.Second)
-		}
+	logger.Printf("[NewStandardRouter] router has been created: %#v", sr)
+}
 
-		panic("Final connection died. Respawning...")
-	}()
+func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
+	router := &StandardRouter{
+		publisher:        publisher,
+		subscriber:       subscriber,
+		heartbeatTimeout: time.Second,
+		topic:            "router-" + CreateUUID(),
+		pendingResponses: map[string]chan *Request{},
+	}
 
-	logger.Printf("[NewStandardRouter] router has been created: %#v", router)
+	router.subscribe()
+
+	return router
+}
+
+func NewStandardRouterWithTopic(publisher Publisher, subscriber Subscriber, topic string) Router {
+	router := &StandardRouter{
+		publisher:        publisher,
+		subscriber:       subscriber,
+		heartbeatTimeout: time.Second,
+		topic:            topic,
+		pendingResponses: map[string]chan *Request{},
+	}
+
+	router.subscribe()
 
 	return router
 }
