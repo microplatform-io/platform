@@ -121,7 +121,7 @@ func (sr *StandardRouter) subscribe() {
 			case responses <- response:
 				logger.Printf("[StandardRouter.Subscriber] reply chan was available")
 
-			case <-time.After(250 * time.Millisecond):
+			default:
 				logger.Printf("[StandardRouter.Subscriber] reply chan was not available")
 			}
 
