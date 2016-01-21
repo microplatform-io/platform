@@ -153,6 +153,21 @@ func NewAmqpPublisher(connectionManager *AmqpConnectionManager) (*AmqpPublisher,
 	return publisher, nil
 }
 
+func NewAmqpMultiPublisher(connectionManagers []*AmqpConnectionManager) (Publisher, error) {
+	publishers := make([]Publisher, len(connectionManagers))
+
+	for i := range connectionManagers {
+		publisher, err := NewAmqpPublisher(connectionManagers[i])
+		if err != nil {
+			return nil, err
+		}
+
+		publishers[i] = publisher
+	}
+
+	return NewMultiPublisher(publishers), nil
+}
+
 type subscription struct {
 	Topic   string
 	Handler ConsumerHandler
@@ -313,6 +328,21 @@ func NewAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (
 	return subscriber, nil
 }
 
+func NewAmqpMultiSubscriber(connectionManagers []*AmqpConnectionManager, queue string) (Subscriber, error) {
+	subscribers := make([]Subscriber, len(connectionManagers))
+
+	for i := range connectionManagers {
+		subscriber, err := NewAmqpSubscriber(connectionManagers[i], queue)
+		if err != nil {
+			return nil, err
+		}
+
+		subscribers[i] = subscriber
+	}
+
+	return NewMultiSubscriber(subscribers), nil
+}
+
 func NewExclusiveAmqpSubscriber(connectionManager *AmqpConnectionManager, queue string) (*AmqpSubscriber, error) {
 	subscriber := &AmqpSubscriber{
 		queue:       queue,
@@ -457,4 +487,14 @@ func NewAmqpConnectionManagerWithEndpoint(endpoint string) *AmqpConnectionManage
 	go amqpConnectionManager.keepAlive()
 
 	return amqpConnectionManager
+}
+
+func NewAmqpConnectionManagersWithEndpoints(endpoints []string) []*AmqpConnectionManager {
+	amqpConnectionManagers := make([]*AmqpConnectionManager, len(endpoints))
+
+	for i := range endpoints {
+		amqpConnectionManagers[i] = NewAmqpConnectionManagerWithEndpoint(endpoints[i])
+	}
+
+	return amqpConnectionManagers
 }
