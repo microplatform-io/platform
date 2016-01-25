@@ -86,7 +86,10 @@ func (sr *StandardRouter) RouteWithTimeout(request *Request, timeout time.Durati
 	responses, streamTimeout := sr.Route(request)
 
 	time.AfterFunc(timeout, func() {
-		streamTimeout <- nil
+		select {
+		case streamTimeout <- nil:
+		default:
+		}
 	})
 
 	return responses, streamTimeout
