@@ -32,51 +32,85 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 		Uri: String(sr.topic),
 	})
 
-	logger.Printf("[StandardRouter.Route] %s - routing request: %s", request.GetUuid(), request)
+	requestUuid := request.GetUuid()
+	requestUri := ""
+	if len(request.GetRouting().GetRouteTo()) > 0 {
+		requestUri = request.GetRouting().GetRouteTo()[0].GetUri()
+	}
+
+	logger.Printf("[StandardRouter.Route] %s - %s - routing request: %s", requestUuid, requestUri, request)
 
 	payload, err := Marshal(request)
 	if err != nil {
-		logger.Printf("[StandardRouter.Route] %s - failed to marshal request payload: %s", request.GetUuid(), err)
+		logger.Printf("[StandardRouter.Route] %s - %s - failed to marshal request payload: %s", requestUuid, requestUri, err)
 	}
 
-	internalResponses := make(chan *Request, 1)
-	responses := make(chan *Request, 1)
+	internalResponses := make(chan *Request)
+	responses := make(chan *Request)
 	streamTimeout := make(chan interface{})
 
 	sr.mu.Lock()
-	sr.pendingResponses[request.GetUuid()] = internalResponses
+	sr.pendingResponses[requestUuid] = internalResponses
 	sr.mu.Unlock()
 
 	go func() {
+		timer := time.NewTimer(sr.heartbeatTimeout)
+		defer timer.Stop()
+
 		for {
 			select {
 			case response := <-internalResponses:
+				responseUri := ""
+				if len(response.GetRouting().GetRouteTo()) > 0 {
+					responseUri = response.GetRouting().GetRouteTo()[0].GetUri()
+				}
+
+				logger.Printf("[StandardRouter.Route] %s - %s - %s - received an internal response", requestUuid, requestUri, responseUri)
+
 				// Internal requests shouldn't have to deal with heartbeats from other services
-				if IsInternalRequest(request) && response.Routing.RouteTo[0].GetUri() == "resource:///heartbeat" {
+				if IsInternalRequest(request) && responseUri == "resource:///heartbeat" {
+					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was an internal request so we will bypass sending the heartbeat", requestUuid, requestUri, responseUri)
 					continue
 				}
 
-				responses <- response
+				select {
+				case responses <- response:
+					logger.Printf("[StandardRouter.Route] %s - %s - %s - successfully notified client of the response", requestUuid, requestUri, responseUri)
+				default:
+					logger.Printf("[StandardRouter.Route] %s - %s - %s - failed to notify client of the response", requestUuid, requestUri, responseUri)
+				}
 
 				if response.GetCompleted() {
+					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was the final response, shutting down the goroutine", requestUuid, requestUri, responseUri)
 					return
 				}
 
-			case <-time.After(sr.heartbeatTimeout):
-				streamTimeout <- nil
+			case <-timer.C:
+				select {
+				case streamTimeout <- nil:
+					logger.Printf("[StandardRouter.Route] %s - %s - successfully notified client of authentic stream timeout, shutting down the goroutine", requestUuid, requestUri)
+				default:
+					logger.Printf("[StandardRouter.Route] %s - %s - failed to notify client of authentic stream timeout, shutting down the goroutine", requestUuid, requestUri)
+				}
 
 				return
 			}
+
+			timer.Reset(sr.heartbeatTimeout)
 		}
 	}()
 
-	parsedUri, err := url.Parse(request.Routing.RouteTo[0].GetUri())
+	parsedUri, err := url.Parse(requestUri)
 	if err != nil {
-		logger.Fatalf("[StandardRouter.Route] %s - Failed to parse route to uri: %s", request.GetUuid(), err)
+		logger.Fatalf("[StandardRouter.Route] %s - %s - Failed to parse the request uri: %s", requestUuid, requestUri, err)
+
+		return responses, streamTimeout
 	}
 
 	if err := sr.publisher.Publish(parsedUri.Scheme+"-"+parsedUri.Path, payload); err != nil {
-		logger.Printf("[StandardRouter.Route] %s - failed to publish request to microservices: %s", request.GetUuid(), err)
+		logger.Printf("[StandardRouter.Route] %s - %s - failed to publish request to microservices: %s", requestUuid, requestUri, err)
+
+		return responses, streamTimeout
 	}
 
 	return responses, streamTimeout
@@ -85,10 +119,15 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 func (sr *StandardRouter) RouteWithTimeout(request *Request, timeout time.Duration) (chan *Request, chan interface{}) {
 	responses, streamTimeout := sr.Route(request)
 
+	requestUuid := request.GetUuid()
+	requestUri := request.GetRouting().GetRouteTo()[0].GetUri()
+
 	time.AfterFunc(timeout, func() {
 		select {
 		case streamTimeout <- nil:
+			logger.Printf("[StandardRouter.RouteWithTimeout] %s - %s - successfully notified client of artificial stream timeout", requestUuid, requestUri)
 		default:
+			logger.Printf("[StandardRouter.RouteWithTimeout] %s - %s - failed to notify client of artificial stream timeout", requestUuid, requestUri)
 		}
 	})
 
@@ -101,8 +140,6 @@ func (sr *StandardRouter) SetHeartbeatTimeout(heartbeatTimeout time.Duration) {
 
 func (sr *StandardRouter) subscribe() {
 	logger.Printf("[NewStandardRouter] creating a new standard router.")
-	logger.Printf("[NewStandardRouter] using publisher: %#v", sr.publisher)
-	logger.Printf("[NewStandardRouter] using subscriber: %#v", sr.subscriber)
 
 	consumedWorkCountMutex = &sync.Mutex{}
 
@@ -116,28 +153,33 @@ func (sr *StandardRouter) subscribe() {
 			return err
 		}
 
-		logger.Printf("[StandardRouter.Subscriber] received response for router: %s", response)
+		responseUuid := response.GetUuid()
+		responseUri := ""
+		if len(response.GetRouting().GetRouteTo()) > 0 {
+			responseUri = response.GetRouting().GetRouteTo()[0].GetUri()
+		}
+
+		logger.Printf("[StandardRouter.Subscriber] %s - %s - received response for router", responseUuid, responseUri)
 
 		sr.mu.Lock()
 		if responses, exists := sr.pendingResponses[response.GetUuid()]; exists {
 			select {
 			case responses <- response:
-				logger.Printf("[StandardRouter.Subscriber] reply chan was available")
+				logger.Printf("[StandardRouter.Subscriber] %s - %s - reply chan was available", responseUuid, responseUri)
 
 			default:
-				logger.Printf("[StandardRouter.Subscriber] reply chan was not available")
+				logger.Printf("[StandardRouter.Subscriber] %s - %s - reply chan was not available", responseUuid, responseUri)
 			}
 
 			if response.GetCompleted() {
-				logger.Printf("[StandardRouter.Subscriber] this was the last response, closing and deleting the responses chan")
+				logger.Printf("[StandardRouter.Subscriber] %s - %s - this was the last response, closing and deleting the responses chan", responseUuid, responseUri)
 
 				delete(sr.pendingResponses, response.GetUuid())
-				// close(responses)
 			}
 		}
 		sr.mu.Unlock()
 
-		logger.Printf("[StandardRouter.Subscriber] completed routing response: %s", response)
+		logger.Printf("[StandardRouter.Subscriber] %s - %s - completed routing response", responseUuid, responseUri)
 
 		return nil
 	}))
