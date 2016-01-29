@@ -197,7 +197,7 @@ func newSubscription(topic string, handler ConsumerHandler) *subscription {
 	s := &subscription{
 		Topic:   topic,
 		Handler: handler,
-		msgChan: make(chan amqp.Delivery),
+		msgChan: make(chan amqp.Delivery, MAX_WORKERS),
 	}
 
 	logger.Printf("[newSubscription] creating '%s' subscription worker pool", topic)

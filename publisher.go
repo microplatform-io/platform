@@ -1,5 +1,7 @@
 package platform
 
+import "errors"
+
 type MultiPublisher struct {
 	publishers []Publisher
 
@@ -7,6 +9,10 @@ type MultiPublisher struct {
 }
 
 func (p *MultiPublisher) Publish(topic string, body []byte) error {
+	if len(p.publishers) <= 0 {
+		return errors.New("No publishers have been declared in the multi publisher")
+	}
+
 	defer p.incrementOffset()
 
 	return p.publishers[p.offset].Publish(topic, body)
