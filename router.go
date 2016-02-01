@@ -45,8 +45,8 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 		logger.Printf("[StandardRouter.Route] %s - %s - failed to marshal request payload: %s", requestUuid, requestUri, err)
 	}
 
-	internalResponses := make(chan *Request)
-	responses := make(chan *Request)
+	internalResponses := make(chan *Request, 1)
+	responses := make(chan *Request, 1)
 	streamTimeout := make(chan interface{})
 
 	sr.mu.Lock()
