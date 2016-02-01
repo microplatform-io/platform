@@ -204,7 +204,7 @@ func (s *Service) Run() {
 	go func() {
 		select {
 		case <-sigc:
-			logger.Println("Recieved exit signal, waiting for work queue to empty..")
+			logger.Println("Received exit signal, waiting for work queue to empty..")
 			stillConsuming = false
 
 			for {
@@ -220,7 +220,8 @@ func (s *Service) Run() {
 
 	s.subscriber.Run()
 
-	logger.Println("Subscriptions have stopped")
+	// Let's just block indefinitely, services should never just die
+	<-make(chan bool)
 }
 
 func NewService(serviceName string, publisher Publisher, subscriber Subscriber) (*Service, error) {

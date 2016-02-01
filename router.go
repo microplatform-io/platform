@@ -184,7 +184,7 @@ func (sr *StandardRouter) subscribe() {
 		return nil
 	}))
 
-	go sr.subscriber.Run()
+	sr.subscriber.Run()
 
 	logger.Printf("[NewStandardRouter] router has been created: %#v", sr)
 }

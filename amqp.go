@@ -216,19 +216,28 @@ type AmqpSubscriber struct {
 	exclusive     bool
 	autoDelete    bool
 	amqpChannel   *AmqpChannel
+	started       chan interface{}
+	mu            sync.Mutex
 }
 
-func (s *AmqpSubscriber) Run() error {
+func (s *AmqpSubscriber) Run() {
 	logger.Printf("[AmqpSubscriber.Run] initiating")
 
-	for {
-		logger.Println("[AmqpSubscriber.Run] Attempting to run subscription.")
-		if err := s.run(); err != nil {
-			logger.Printf("[AmqpSubscriber.Run] failed to run subscription: %s", err)
-		}
-	}
+	s.mu.Lock()
+	s.started = make(chan interface{})
+	s.mu.Unlock()
 
-	return nil
+	go func() {
+		for {
+			logger.Println("[AmqpSubscriber.Run] Attempting to run subscription.")
+			if err := s.run(); err != nil {
+				logger.Printf("[AmqpSubscriber.Run] failed to run subscription: %s", err)
+			}
+		}
+	}()
+
+	// Wait for everything to be bound
+	<-s.started
 }
 
 // Our running of the actual subscriber, where we declare and bind based on the notion of the
@@ -247,13 +256,13 @@ func (s *AmqpSubscriber) run() error {
 		autoDelete = true
 	}
 
-	if _, err := channel.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, true, nil); err != nil {
+	if _, err := channel.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, false, nil); err != nil {
 		return err
 	}
 
 	for _, subscription := range s.subscriptions {
 		logger.Println("> binding", s.queue, "to", subscription.Topic)
-		if err := channel.QueueBind(s.queue, subscription.Topic, "amq.topic", true, nil); err != nil {
+		if err := channel.QueueBind(s.queue, subscription.Topic, "amq.topic", false, nil); err != nil {
 			return err
 		}
 	}
@@ -276,6 +285,13 @@ func (s *AmqpSubscriber) run() error {
 	iterate := true
 
 	closeChan := s.amqpChannel.NotifyClose()
+
+	s.mu.Lock()
+	if s.started != nil {
+		close(s.started)
+		s.started = nil
+	}
+	s.mu.Unlock()
 
 	for iterate {
 		select {

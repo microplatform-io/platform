@@ -15,7 +15,7 @@ func (handlerFunc HandlerFunc) Handle(responseSender ResponseSender, request *Re
 }
 
 type Subscriber interface {
-	Run() error
+	Run()
 	Subscribe(topic string, handler ConsumerHandler)
 }
 

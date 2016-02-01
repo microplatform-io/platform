@@ -1,17 +1,14 @@
 package platform
 
-import (
-	"errors"
-	"sync"
-)
+import "sync"
 
 type MultiSubscriber struct {
 	subscribers []Subscriber
 }
 
-func (s *MultiSubscriber) Run() error {
+func (s *MultiSubscriber) Run() {
 	if len(s.subscribers) <= 0 {
-		return errors.New("No subscribers have been declared in the multi subscriber")
+		panic("No subscribers have been declared in the multi subscriber")
 	}
 
 	wg := &sync.WaitGroup{}
@@ -26,8 +23,6 @@ func (s *MultiSubscriber) Run() error {
 	}
 
 	wg.Wait()
-
-	return nil
 }
 
 func (s *MultiSubscriber) Subscribe(topic string, handler ConsumerHandler) {
