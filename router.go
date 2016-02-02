@@ -58,6 +58,8 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 		defer timer.Stop()
 
 		for {
+			timer.Reset(sr.heartbeatTimeout)
+
 			select {
 			case response := <-internalResponses:
 				responseUri := ""
@@ -95,8 +97,6 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 
 				return
 			}
-
-			timer.Reset(sr.heartbeatTimeout)
 		}
 	}()
 
@@ -193,7 +193,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 	router := &StandardRouter{
 		publisher:        publisher,
 		subscriber:       subscriber,
-		heartbeatTimeout: time.Second,
+		heartbeatTimeout: time.Second * 2,
 		topic:            "router-" + CreateUUID(),
 		pendingResponses: map[string]chan *Request{},
 	}
@@ -207,7 +207,7 @@ func NewStandardRouterWithTopic(publisher Publisher, subscriber Subscriber, topi
 	router := &StandardRouter{
 		publisher:        publisher,
 		subscriber:       subscriber,
-		heartbeatTimeout: time.Second,
+		heartbeatTimeout: time.Second * 2,
 		topic:            topic,
 		pendingResponses: map[string]chan *Request{},
 	}
