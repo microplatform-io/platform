@@ -7,8 +7,6 @@ import (
 	"os"
 	"strings"
 	"sync"
-
-	etcd "github.com/coreos/etcd/client"
 )
 
 type ServiceConfig struct {
@@ -178,16 +176,6 @@ func NewArrayConfigManager(serviceVariableStrings []string) (*ArrayConfigManager
 
 func NewEnvConfigManager() (*ArrayConfigManager, error) {
 	return NewArrayConfigManager(os.Environ())
-}
-
-func getEtcdBasename(key string) string {
-	keyParts := strings.Split(key, "/")
-
-	return keyParts[len(keyParts)-1]
-}
-
-type EtcdConfigManager struct {
-	client *etcd.Client
 }
 
 type JsonConfigManager struct {

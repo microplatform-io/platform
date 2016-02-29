@@ -2,6 +2,21 @@ package platform
 
 import "sync"
 
+type Subscriber interface {
+	Run()
+	Subscribe(topic string, handler ConsumerHandler)
+}
+
+type ConsumerHandler interface {
+	HandleMessage(body []byte) error
+}
+
+type ConsumerHandlerFunc func([]byte) error
+
+func (handlerFunc ConsumerHandlerFunc) HandleMessage(p []byte) error {
+	return handlerFunc(p)
+}
+
 type MultiSubscriber struct {
 	subscribers []Subscriber
 }

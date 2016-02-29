@@ -2,6 +2,10 @@ package platform
 
 import "errors"
 
+type Publisher interface {
+	Publish(topic string, body []byte) error
+}
+
 type MultiPublisher struct {
 	publishers []Publisher
 

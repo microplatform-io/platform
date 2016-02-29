@@ -1,108 +1,26 @@
 package platform
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/signal"
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 )
 
-var (
-	logger                  = GetLogger("platform")
-	serviceToken            = os.Getenv("SERVICE_TOKEN")
-	stillConsuming          bool
-	consumedWorkCount       int
-	consumedWorkCountMutex  *sync.Mutex
-	PREVENT_PLATFORM_PANICS = Getenv("PLATFORM_PREVENT_PANICS", "1") == "1"
-)
-
-type Courier struct {
-	responses chan *Request
+type Handler interface {
+	Handle(responseSender ResponseSender, request *Request)
 }
 
-func (c *Courier) Send(response *Request) {
-	if response.GetCompleted() {
-		logger.Printf("[Courier] %s sending FINAL %s", response.GetUuid(), response.Routing.RouteTo[0].GetUri())
-	} else {
-		logger.Printf("[Courier] %s sending INTERMEDIARY %s", response.GetUuid(), response.Routing.RouteTo[0].GetUri())
-	}
+type HandlerFunc func(responseSender ResponseSender, request *Request)
 
-	c.responses <- response
-}
-
-func NewCourier(publisher Publisher) *Courier {
-	responses := make(chan *Request, 10)
-
-	go func() {
-		for response := range responses {
-			logger.Printf("[Service.Subscriber] publishing response: %s", response)
-
-			destinationRouteIndex := len(response.Routing.RouteTo) - 1
-			destinationRoute := response.Routing.RouteTo[destinationRouteIndex]
-			response.Routing.RouteTo = response.Routing.RouteTo[:destinationRouteIndex]
-
-			body, err := Marshal(response)
-			if err != nil {
-				logger.Printf("[Service.Subscriber] failed to marshal response: %s", err)
-				continue
-			}
-
-			// URI may not be valid here, we may need to parse it first for good practice. - Bryan
-			publisher.Publish(destinationRoute.GetUri(), body)
-
-			logger.Println("[Service.Subscriber] published response successfully")
-		}
-	}()
-
-	return &Courier{
-		responses: responses,
-	}
-}
-
-type RequestHeartbeatCourier struct {
-	parent ResponseSender
-	quit   chan bool
-}
-
-func (rhc *RequestHeartbeatCourier) Send(response *Request) {
-	logger.Printf("[RequestHeartbeatCourier.Send] %s attempting to send response", response.GetUuid())
-	if response.GetCompleted() {
-		rhc.quit <- true
-	}
-
-	rhc.parent.Send(response)
-
-	logger.Printf("[RequestHeartbeatCourier.Send] %s sent response", response.GetUuid())
-}
-
-func NewRequestHeartbeatCourier(parent ResponseSender, request *Request) *RequestHeartbeatCourier {
-	quit := make(chan bool, 1)
-
-	logger.Println("[NewRequestHeartbeatCourier] creating a new heartbeat courier")
-
-	go func() {
-		for {
-			select {
-			case <-time.After(500 * time.Millisecond):
-				parent.Send(GenerateResponse(request, &Request{
-					Routing: RouteToUri("resource:///heartbeat"),
-				}))
-
-			case <-quit:
-				return
-
-			}
-		}
-	}()
-
-	return &RequestHeartbeatCourier{
-		parent: parent,
-		quit:   quit,
-	}
+func (handlerFunc HandlerFunc) Handle(responseSender ResponseSender, request *Request) {
+	handlerFunc(responseSender, request)
 }
 
 func identifyPanic() string {
@@ -136,14 +54,27 @@ func identifyPanic() string {
 type Service struct {
 	publisher  Publisher
 	subscriber Subscriber
-	courier    *Courier
+	courier    ResponseSender
 	name       string
+
+	mu                sync.Mutex
+	closed            bool
+	workerPendingJobs int32
+	workerQuitChan    chan interface{}
+	allWorkersDone    chan interface{}
 }
 
 func (s *Service) AddHandler(path string, handler Handler) {
 	logger.Println("[Service.AddHandler] adding handler", path)
 
 	s.subscriber.Subscribe("microservice-"+path, ConsumerHandlerFunc(func(body []byte) error {
+		if !s.canAcceptWork() {
+			return errors.New("no new work can be accepted")
+		}
+
+		s.incrementWorkerPendingJobs()
+		defer s.decrementWorkerPendingJobs()
+
 		logger.Printf("[Service.Subscriber] handling %s request", path)
 
 		request := &Request{}
@@ -153,7 +84,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 			return nil
 		}
 
-		requestHeartbeatCourier := NewRequestHeartbeatCourier(s.courier, request)
+		requestHeartbeatResponseSender := NewRequestHeartbeatResponseSender(s.courier, request)
 
 		if PREVENT_PLATFORM_PANICS {
 			defer func() {
@@ -162,7 +93,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 						Message: String(fmt.Sprintf("A fatal error has occurred. %s: %s %s", path, identifyPanic(), r)),
 					})
 
-					requestHeartbeatCourier.Send(GenerateResponse(request, &Request{
+					requestHeartbeatResponseSender.Send(GenerateResponse(request, &Request{
 						Routing:   RouteToUri("resource:///platform/reply/error"),
 						Payload:   panicErrorBytes,
 						Completed: Bool(true),
@@ -173,7 +104,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 			}()
 		}
 
-		handler.Handle(requestHeartbeatCourier, request)
+		handler.Handle(requestHeartbeatResponseSender, request)
 
 		return nil
 	}))
@@ -181,6 +112,9 @@ func (s *Service) AddHandler(path string, handler Handler) {
 
 func (s *Service) AddListener(topic string, handler ConsumerHandler) {
 	s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(body []byte) error {
+		s.incrementWorkerPendingJobs()
+		defer s.decrementWorkerPendingJobs()
+
 		if PREVENT_PLATFORM_PANICS {
 			defer func() {
 				if r := recover(); r != nil {
@@ -193,63 +127,92 @@ func (s *Service) AddListener(topic string, handler ConsumerHandler) {
 	}))
 }
 
+func (s *Service) canAcceptWork() bool {
+	select {
+	case <-s.workerQuitChan:
+		return false
+	default:
+		return true
+	}
+}
+
+func (s *Service) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if !s.closed {
+		logger.Println("[Service.Close] service is shutting down")
+
+		s.closed = true
+
+		close(s.workerQuitChan)
+
+		logger.Printf("[Service.Close] pending jobs: %d", s.workerPendingJobs)
+
+		if s.workerPendingJobs > 0 {
+			<-s.allWorkersDone
+		} else {
+			close(s.allWorkersDone)
+		}
+
+		logger.Println("[Service.Close] all workers have finished")
+	} else {
+		logger.Println("[Service.Close] service has already been shut down")
+	}
+
+	// Something about this helps graceful shut downs, let's look into it more
+	time.Sleep(1 * time.Second)
+
+	return nil
+}
+
+func (s *Service) incrementWorkerPendingJobs() {
+	atomic.AddInt32(&s.workerPendingJobs, 1)
+}
+
+func (s *Service) decrementWorkerPendingJobs() {
+	atomic.AddInt32(&s.workerPendingJobs, -1)
+
+	if s.closed && s.workerPendingJobs == 0 {
+		close(s.allWorkersDone)
+	}
+}
+
 func (s *Service) Run() {
-	stillConsuming = true
 	sigc := make(chan os.Signal, 1)
-	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT)
+	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGKILL)
 
-	consumedWorkCountMutex = &sync.Mutex{}
-
-	// Emit a signal if we catch an interrupt
+	// Close the service if we detect a kill signal
 	go func() {
 		select {
 		case <-sigc:
-			logger.Println("Received exit signal, waiting for work queue to empty..")
-			stillConsuming = false
-
-			for {
-				if getConsumerWorkCount() < 1 {
-					time.Sleep(time.Millisecond * 500)
-					break
-				}
-			}
-			logger.Println("Exiting.")
-			os.Exit(0)
+			s.Close()
 		}
 	}()
 
 	s.subscriber.Run()
 
-	// Let's just block indefinitely, services should never just die
-	<-make(chan bool)
+	<-s.allWorkersDone
 }
 
 func NewService(serviceName string, publisher Publisher, subscriber Subscriber) (*Service, error) {
 	return &Service{
-		subscriber: subscriber,
-		publisher:  publisher,
-		courier:    NewCourier(publisher),
-		name:       serviceName,
+		subscriber:     subscriber,
+		publisher:      publisher,
+		courier:        NewStandardResponseSender(publisher),
+		name:           serviceName,
+		workerQuitChan: make(chan interface{}),
+		allWorkersDone: make(chan interface{}),
 	}, nil
 }
 
-func NewBasicService(serviceName string) (*Service, error) {
-	rabbitUser := Getenv("RABBITMQ_USER", "admin")
-	rabbitPass := Getenv("RABBITMQ_PASS", "admin")
-	rabbitAddr := Getenv("RABBITMQ_PORT_5672_TCP_ADDR", "127.0.0.1")
-	rabbitPort := Getenv("RABBITMQ_PORT_5672_TCP_PORT", "5672")
-
-	connectionManager := NewAmqpConnectionManager(rabbitUser, rabbitPass, rabbitAddr+":"+rabbitPort, "")
-
-	publisher, err := NewAmqpPublisher(connectionManager)
-	if err != nil {
-		return nil, err
-	}
-
-	subscriber, err := NewAmqpSubscriber(connectionManager, serviceName)
-	if err != nil {
-		return nil, err
-	}
-
-	return NewService(serviceName, publisher, subscriber)
+func NewServiceWithResponseSender(serviceName string, publisher Publisher, subscriber Subscriber, responseSender ResponseSender) (*Service, error) {
+	return &Service{
+		subscriber:     subscriber,
+		publisher:      publisher,
+		courier:        responseSender,
+		name:           serviceName,
+		workerQuitChan: make(chan interface{}),
+		allWorkersDone: make(chan interface{}),
+	}, nil
 }

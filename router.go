@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"fmt"
 	"net/url"
 	"sync"
 	"time"
@@ -8,7 +9,6 @@ import (
 
 type Router interface {
 	Route(request *Request) (chan *Request, chan interface{})
-	RouteWithTimeout(request *Request, timeout time.Duration) (chan *Request, chan interface{})
 	SetHeartbeatTimeout(heartbeatTimeout time.Duration)
 }
 
@@ -23,19 +23,43 @@ type StandardRouter struct {
 	mu               sync.Mutex
 }
 
+func createResponseChanWithError(err *Error) chan *Request {
+	responses := make(chan *Request, 1)
+
+	errorBytes, _ := Marshal(err)
+
+	responses <- &Request{
+		Routing: RouteToUri("resource:///platform/reply/error"),
+		Payload: errorBytes,
+	}
+
+	return responses
+}
+
 func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface{}) {
 	if request.Uuid == nil {
 		request.Uuid = String("request-" + CreateUUID())
 	}
 
-	request.Routing.RouteFrom = append(request.Routing.RouteFrom, &Route{
-		Uri: String(sr.topic),
-	})
-
 	requestUuid := request.GetUuid()
 	requestUri := ""
 	if len(request.GetRouting().GetRouteTo()) > 0 {
 		requestUri = request.GetRouting().GetRouteTo()[0].GetUri()
+	}
+
+	parsedUri, err := url.Parse(requestUri)
+	if err != nil {
+		logger.Printf("[StandardRouter.Route] %s - %s - Failed to parse the request uri: %s", requestUuid, requestUri, err)
+
+		return createResponseChanWithError(&Error{
+			Message: String(fmt.Sprintf("Failed to parse the RouteTo URI: %s", err)),
+		}), nil
+	}
+
+	if request.Routing != nil {
+		request.Routing.RouteFrom = append(request.Routing.RouteFrom, &Route{
+			Uri: String(sr.topic),
+		})
 	}
 
 	logger.Printf("[StandardRouter.Route] %s - %s - routing request: %s", requestUuid, requestUri, request)
@@ -95,41 +119,22 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 					logger.Printf("[StandardRouter.Route] %s - %s - failed to notify client of authentic stream timeout, shutting down the goroutine", requestUuid, requestUri)
 				}
 
+				sr.mu.Lock()
+				delete(sr.pendingResponses, requestUuid)
+				sr.mu.Unlock()
+
 				return
 			}
 		}
 	}()
 
-	parsedUri, err := url.Parse(requestUri)
-	if err != nil {
-		logger.Fatalf("[StandardRouter.Route] %s - %s - Failed to parse the request uri: %s", requestUuid, requestUri, err)
-
-		return responses, streamTimeout
-	}
-
 	if err := sr.publisher.Publish(parsedUri.Scheme+"-"+parsedUri.Path, payload); err != nil {
 		logger.Printf("[StandardRouter.Route] %s - %s - failed to publish request to microservices: %s", requestUuid, requestUri, err)
 
-		return responses, streamTimeout
+		return createResponseChanWithError(&Error{
+			Message: String(fmt.Sprintf("Failed to publish request to microservices: %s", err)),
+		}), nil
 	}
-
-	return responses, streamTimeout
-}
-
-func (sr *StandardRouter) RouteWithTimeout(request *Request, timeout time.Duration) (chan *Request, chan interface{}) {
-	responses, streamTimeout := sr.Route(request)
-
-	requestUuid := request.GetUuid()
-	requestUri := request.GetRouting().GetRouteTo()[0].GetUri()
-
-	time.AfterFunc(timeout, func() {
-		select {
-		case streamTimeout <- nil:
-			logger.Printf("[StandardRouter.RouteWithTimeout] %s - %s - successfully notified client of artificial stream timeout", requestUuid, requestUri)
-		default:
-			logger.Printf("[StandardRouter.RouteWithTimeout] %s - %s - failed to notify client of artificial stream timeout", requestUuid, requestUri)
-		}
-	})
 
 	return responses, streamTimeout
 }
@@ -140,8 +145,6 @@ func (sr *StandardRouter) SetHeartbeatTimeout(heartbeatTimeout time.Duration) {
 
 func (sr *StandardRouter) subscribe() {
 	logger.Printf("[NewStandardRouter] creating a new standard router.")
-
-	consumedWorkCountMutex = &sync.Mutex{}
 
 	sr.subscriber.Subscribe(sr.topic, ConsumerHandlerFunc(func(body []byte) error {
 		logger.Println("[StandardRouter.Subscriber] receiving message for router")
@@ -176,6 +179,8 @@ func (sr *StandardRouter) subscribe() {
 
 				delete(sr.pendingResponses, response.GetUuid())
 			}
+		} else {
+			logger.Printf("[StandardRouter.Subscriber] %s - %s - pending response channel did not exist, it may have been deleted", responseUuid, responseUri)
 		}
 		sr.mu.Unlock()
 
@@ -189,7 +194,7 @@ func (sr *StandardRouter) subscribe() {
 	logger.Printf("[NewStandardRouter] router has been created: %#v", sr)
 }
 
-func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
+func NewStandardRouter(publisher Publisher, subscriber Subscriber) *StandardRouter {
 	router := &StandardRouter{
 		publisher:        publisher,
 		subscriber:       subscriber,
@@ -203,7 +208,7 @@ func NewStandardRouter(publisher Publisher, subscriber Subscriber) Router {
 	return router
 }
 
-func NewStandardRouterWithTopic(publisher Publisher, subscriber Subscriber, topic string) Router {
+func NewStandardRouterWithTopic(publisher Publisher, subscriber Subscriber, topic string) *StandardRouter {
 	router := &StandardRouter{
 		publisher:        publisher,
 		subscriber:       subscriber,
