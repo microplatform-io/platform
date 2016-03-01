@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"errors"
+	"time"
 
 	"github.com/microplatform-io/platform"
 	"github.com/streadway/amqp"
@@ -40,15 +41,21 @@ func (s *Subscriber) Close() error {
 // subscriber and handles the messages. If we recieve a signal that the channel interface is closed
 // we will break out and wait for a new connection.
 func (s *Subscriber) run() error {
+	logger.Printf("[Subscriber.run] bootstrapping connection")
+
 	connectionInterface, err := s.dialerInterface.Dial()
 	if err != nil {
+		logger.Printf("[Subscriber.run] failed to get a connection interface: %s", err)
 		return err
 	}
 
 	connectionClosed := connectionInterface.NotifyClose(make(chan *amqp.Error))
 
+	logger.Println("[Subscriber.run] bootstrapping channel using:", connectionInterface)
+
 	channelInterface, err := connectionInterface.GetChannelInterface()
 	if err != nil {
+		logger.Printf("[Subscriber.run] failed to get a channel interface: %s", err)
 		return err
 	}
 
@@ -65,13 +72,19 @@ func (s *Subscriber) run() error {
 		autoDelete = true
 	}
 
+	logger.Printf("[Subscriber.run] bootstrapping queue")
+
 	if _, err := channelInterface.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, false, nil); err != nil {
+		logger.Printf("[Subscriber.run] failed to declare a queue: %s", err)
 		return err
 	}
+
+	logger.Printf("[Subscriber.run] bootstrapping queue bindings")
 
 	for _, subscription := range s.subscriptions {
 		logger.Println("> binding", s.queue, "to", subscription.topic)
 		if err := channelInterface.QueueBind(s.queue, subscription.topic, "amq.topic", false, nil); err != nil {
+			logger.Printf("[Subscriber.run] failed to bind topic to a queue: %s", err)
 			return err
 		}
 	}
@@ -144,7 +157,7 @@ func (s *Subscriber) Run() {
 
 	go func() {
 		for {
-			logger.Println("[Subscriber.Run] attempting to run subscription.")
+			logger.Println("[Subscriber.Run] calling private run method.")
 
 			if err := s.run(); err != nil {
 				if err == subscriberClosed {
@@ -152,8 +165,10 @@ func (s *Subscriber) Run() {
 				}
 
 				logger.Printf("[Subscriber.Run] failed to run subscription: %s", err)
-				continue
 			}
+
+			// Sleeping for a few milliseconds allows the close event to propagate everywhere
+			time.Sleep(10 * time.Millisecond)
 		}
 	}()
 
