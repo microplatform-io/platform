@@ -3,8 +3,12 @@ package platform
 import (
 	"fmt"
 	"net/url"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
+
+	"github.com/golang/protobuf/proto"
 )
 
 type Router interface {
@@ -36,10 +40,16 @@ func createResponseChanWithError(err *Error) chan *Request {
 	return responses
 }
 
-func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface{}) {
+func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan interface{}) {
+	request := proto.Clone(originalRequest).(*Request)
+
 	if request.Uuid == nil {
 		request.Uuid = String("request-" + CreateUUID())
 	}
+
+	requestUuidSuffix := "::" + strconv.Itoa(int(time.Now().UnixNano()))
+
+	request.Uuid = String(request.GetUuid() + requestUuidSuffix)
 
 	requestUuid := request.GetUuid()
 	requestUri := ""
@@ -98,6 +108,9 @@ func (sr *StandardRouter) Route(request *Request) (chan *Request, chan interface
 					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was an internal request so we will bypass sending the heartbeat", requestUuid, requestUri, responseUri)
 					continue
 				}
+
+				// Remove the request uuid suffix to ensure proper routing on the response
+				response.Uuid = String(strings.Replace(response.GetUuid(), requestUuidSuffix, "", 1))
 
 				select {
 				case responses <- response:
