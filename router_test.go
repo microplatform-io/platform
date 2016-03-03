@@ -8,17 +8,21 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func getStandardRouterPendingResponsesMatchingUuidPrefix(router *StandardRouter, requestUuid string) chan *Request {
-	var pendingResponses chan *Request
+func getStandardRouterPendingResponsesMatchingUuidPrefix(router *StandardRouter, requestUuid string) (string, chan *Request) {
+	var (
+		actualUuid       string
+		pendingResponses chan *Request
+	)
 
-	for i := range router.pendingResponses {
-		if strings.HasPrefix(i, requestUuid) {
-			pendingResponses = router.pendingResponses[i]
+	for uuid := range router.pendingResponses {
+		if strings.HasPrefix(uuid, requestUuid) {
+			actualUuid = uuid
+			pendingResponses = router.pendingResponses[uuid]
 			break
 		}
 	}
 
-	return pendingResponses
+	return actualUuid, pendingResponses
 }
 
 func TestNewStandardRouter(t *testing.T) {
@@ -61,7 +65,9 @@ func TestNewStandardRouter(t *testing.T) {
 
 		// There should be at least one entry in the pending responses
 		So(len(router.pendingResponses), ShouldEqual, 1)
-		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldNotBeNil)
+		actualUuid, pendingResponses := getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid)
+		So(actualUuid, ShouldNotBeEmpty)
+		So(pendingResponses, ShouldNotBeNil)
 
 		So(mockSubscriber.getTopicTotalHandlers(), ShouldResemble, map[string]int{
 			"testing-router": 1,
@@ -69,7 +75,7 @@ func TestNewStandardRouter(t *testing.T) {
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 1)
 
 		responseBytes, _ := Marshal(&Request{
-			Uuid:      String(requestUuid),
+			Uuid:      String(actualUuid),
 			Completed: Bool(true),
 		})
 
@@ -84,7 +90,9 @@ func TestNewStandardRouter(t *testing.T) {
 
 		// Now that we've finished the responses, we should have cleared up the map
 		So(len(router.pendingResponses), ShouldEqual, 0)
-		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldBeNil)
+		actualUuid, pendingResponses = getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid)
+		So(actualUuid, ShouldBeEmpty)
+		So(pendingResponses, ShouldBeNil)
 	})
 
 	Convey("Verify that timeouts cleanup the pending responses", t, func() {
@@ -105,7 +113,9 @@ func TestNewStandardRouter(t *testing.T) {
 
 		// There should be at least one entry in the pending responses
 		So(len(router.pendingResponses), ShouldEqual, 1)
-		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldNotBeNil)
+		actualUuid, pendingResponses := getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid)
+		So(actualUuid, ShouldNotBeEmpty)
+		So(pendingResponses, ShouldNotBeNil)
 
 		So(mockSubscriber.getTopicTotalHandlers(), ShouldResemble, map[string]int{
 			"testing-router": 1,
@@ -121,6 +131,8 @@ func TestNewStandardRouter(t *testing.T) {
 
 		// Now that we've timed out, we should have cleared up the map
 		So(len(router.pendingResponses), ShouldEqual, 0)
-		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldBeNil)
+		actualUuid, pendingResponses = getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid)
+		So(actualUuid, ShouldBeEmpty)
+		So(pendingResponses, ShouldBeNil)
 	})
 }
