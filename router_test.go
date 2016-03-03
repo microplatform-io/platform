@@ -1,11 +1,25 @@
 package platform
 
 import (
+	"strings"
 	"testing"
 	"time"
 
 	. "github.com/smartystreets/goconvey/convey"
 )
+
+func getStandardRouterPendingResponsesMatchingUuidPrefix(router *StandardRouter, requestUuid string) chan *Request {
+	var pendingResponses chan *Request
+
+	for i := range router.pendingResponses {
+		if strings.HasPrefix(i, requestUuid) {
+			pendingResponses = router.pendingResponses[i]
+			break
+		}
+	}
+
+	return pendingResponses
+}
 
 func TestNewStandardRouter(t *testing.T) {
 	Convey("Routing to an invalid uri should immediately place a platform error on the responses", t, func() {
@@ -45,9 +59,9 @@ func TestNewStandardRouter(t *testing.T) {
 			Routing: RouteToUri("microservice:///teltech/get/foobar"),
 		})
 
-		pendingResponses, pendingResponseChanExists := router.pendingResponses[requestUuid]
-		So(pendingResponses, ShouldNotBeNil)
-		So(pendingResponseChanExists, ShouldBeTrue)
+		// There should be at least one entry in the pending responses
+		So(len(router.pendingResponses), ShouldEqual, 1)
+		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldNotBeNil)
 
 		So(mockSubscriber.getTopicTotalHandlers(), ShouldResemble, map[string]int{
 			"testing-router": 1,
@@ -68,10 +82,9 @@ func TestNewStandardRouter(t *testing.T) {
 			t.Error("We were not expecting a timeout")
 		}
 
-		// Now that we've timed out, we should have cleared up the map
-		pendingResponses, pendingResponseChanExists = router.pendingResponses[requestUuid]
-		So(pendingResponses, ShouldBeNil)
-		So(pendingResponseChanExists, ShouldBeFalse)
+		// Now that we've finished the responses, we should have cleared up the map
+		So(len(router.pendingResponses), ShouldEqual, 0)
+		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldBeNil)
 	})
 
 	Convey("Verify that timeouts cleanup the pending responses", t, func() {
@@ -90,9 +103,9 @@ func TestNewStandardRouter(t *testing.T) {
 			Routing: RouteToUri("microservice:///teltech/get/foobar"),
 		})
 
-		pendingResponses, pendingResponseChanExists := router.pendingResponses[requestUuid]
-		So(pendingResponses, ShouldNotBeNil)
-		So(pendingResponseChanExists, ShouldBeTrue)
+		// There should be at least one entry in the pending responses
+		So(len(router.pendingResponses), ShouldEqual, 1)
+		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldNotBeNil)
 
 		So(mockSubscriber.getTopicTotalHandlers(), ShouldResemble, map[string]int{
 			"testing-router": 1,
@@ -107,8 +120,7 @@ func TestNewStandardRouter(t *testing.T) {
 		}
 
 		// Now that we've timed out, we should have cleared up the map
-		pendingResponses, pendingResponseChanExists = router.pendingResponses[requestUuid]
-		So(pendingResponses, ShouldBeNil)
-		So(pendingResponseChanExists, ShouldBeFalse)
+		So(len(router.pendingResponses), ShouldEqual, 0)
+		So(getStandardRouterPendingResponsesMatchingUuidPrefix(router, requestUuid), ShouldBeNil)
 	})
 }
