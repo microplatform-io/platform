@@ -46,6 +46,7 @@ func init() {
 		logrus.SetLevel(logrus.InfoLevel)
 	}
 
+	logrus.SetOutput(os.Stdout)
 	logrus.SetFormatter(&DefaultFormatter{"-----"})
 }
 
@@ -120,6 +121,7 @@ func GetLogger(prefix string) *Logger {
 	logger := logrus.New()
 	logger.Formatter = &DefaultFormatter{prefix}
 	logger.Level = logrus.GetLevel()
+	logger.Out = os.Stdout
 
 	loggers[prefix] = &Logger{logger}
 
