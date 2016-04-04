@@ -111,6 +111,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 }
 
 func (s *Service) AddListener(topic string, handler ConsumerHandler) {
+	logger.Infoln("[Service.AddListener] Adding listener", topic)
 	s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(body []byte) error {
 		s.incrementWorkerPendingJobs()
 		defer s.decrementWorkerPendingJobs()
@@ -122,6 +123,8 @@ func (s *Service) AddListener(topic string, handler ConsumerHandler) {
 				}
 			}()
 		}
+
+		logger.Infof("[Service.AddListener] Handling %s publish", topic)
 
 		return handler.HandleMessage(body)
 	}))
