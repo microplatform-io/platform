@@ -59,7 +59,7 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 
 	parsedUri, err := url.Parse(requestUri)
 	if err != nil {
-		logger.Printf("[StandardRouter.Route] %s - %s - Failed to parse the request uri: %s", requestUuid, requestUri, err)
+		logger.Errorf("[StandardRouter.Route] %s - %s - Failed to parse the request uri: %s", requestUuid, requestUri, err)
 
 		return createResponseChanWithError(&Error{
 			Message: String(fmt.Sprintf("Failed to parse the RouteTo URI: %s", err)),
@@ -72,11 +72,12 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 		})
 	}
 
+	logger.Infof("[StandardRouter.Route]          routing %s request", requestUri)
 	logger.Printf("[StandardRouter.Route] %s - %s - routing request: %s", requestUuid, requestUri, request)
 
 	payload, err := Marshal(request)
 	if err != nil {
-		logger.Printf("[StandardRouter.Route] %s - %s - failed to marshal request payload: %s", requestUuid, requestUri, err)
+		logger.Errorf("[StandardRouter.Route] %s - %s - failed to marshal request payload: %s", requestUuid, requestUri, err)
 	}
 
 	internalResponses := make(chan *Request, 5)
@@ -116,10 +117,11 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 				case responses <- response:
 					logger.Printf("[StandardRouter.Route] %s - %s - %s - successfully notified client of the response", requestUuid, requestUri, responseUri)
 				default:
-					logger.Printf("[StandardRouter.Route] %s - %s - %s - failed to notify client of the response", requestUuid, requestUri, responseUri)
+					logger.Errorf("[StandardRouter.Route] %s - %s - %s - failed to notify client of the response", requestUuid, requestUri, responseUri)
 				}
 
 				if response.GetCompleted() {
+					logger.Infof("[StandardRouter.Route]          received response")
 					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was the final response, shutting down the goroutine", requestUuid, requestUri, responseUri)
 					return
 				}
@@ -142,7 +144,7 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 	}()
 
 	if err := sr.publisher.Publish(parsedUri.Scheme+"-"+parsedUri.Path, payload); err != nil {
-		logger.Printf("[StandardRouter.Route] %s - %s - failed to publish request to microservices: %s", requestUuid, requestUri, err)
+		logger.Errorf("[StandardRouter.Route] %s - %s - failed to publish request to microservices: %s", requestUuid, requestUri, err)
 
 		return createResponseChanWithError(&Error{
 			Message: String(fmt.Sprintf("Failed to publish request to microservices: %s", err)),
@@ -193,7 +195,7 @@ func (sr *StandardRouter) subscribe() {
 				delete(sr.pendingResponses, response.GetUuid())
 			}
 		} else {
-			logger.Printf("[StandardRouter.Subscriber] %s - %s - pending response channel did not exist, it may have been deleted", responseUuid, responseUri)
+			logger.Errorf("[StandardRouter.Subscriber] %s - %s - pending response channel did not exist, it may have been deleted", responseUuid, responseUri)
 		}
 		sr.mu.Unlock()
 

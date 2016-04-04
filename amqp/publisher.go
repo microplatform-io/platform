@@ -47,13 +47,13 @@ func (p *Publisher) resetChannel() error {
 
 func (p *Publisher) Publish(topic string, body []byte) error {
 	var publishErr error
-
+ 
 	for i := 0; i < MAX_PUBLISH_RETRIES; i++ {
 		logger.Printf("[Publisher.Publish] publishing for %s attempt %d of %d", topic, i+1, MAX_PUBLISH_RETRIES)
 
 		channelInterface, err := p.getChannel()
 		if err != nil {
-			logger.Printf("[Publisher.Publish] failed to get channelInterface: %s", err)
+			logger.Errorf("[Publisher.Publish] failed to get channelInterface: %s", err)
 			publishErr = err
 			continue
 		}
@@ -69,14 +69,14 @@ func (p *Publisher) Publish(topic string, body []byte) error {
 			},
 		)
 		if publishErr == nil {
-			logger.Printf("[Publisher.Publish] published for %s", topic)
+			logger.Infof("[Publisher.Publish] published for %s", topic)
 			return nil
 		}
 
-		logger.Printf("[Publisher.Publish] error publishing for %s - %s", topic, publishErr)
+		logger.Errorf("[Publisher.Publish] error publishing for %s - %s", topic, publishErr)
 
 		if err := p.resetChannel(); err != nil {
-			logger.Printf("[Publisher.Publish] failed to reset channelInterface: %s", err)
+			logger.Errorf("[Publisher.Publish] failed to reset channelInterface: %s", err)
 			continue
 		}
 	}

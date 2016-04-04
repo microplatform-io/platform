@@ -24,14 +24,14 @@ func (rs *StandardResponseSender) runResponsePublisher() {
 
 		body, err := Marshal(response)
 		if err != nil {
-			logger.Printf("[Service.Subscriber] failed to marshal response: %s", err)
+			logger.Errorf("[Service.Subscriber] failed to marshal response: %s", err)
 			continue
 		}
 
 		// URI may not be valid here, we may need to parse it first for good practice. - Bryan
 		rs.publisher.Publish(destinationRoute.GetUri(), body)
 
-		logger.Println("[Service.Subscriber] published response successfully")
+		logger.Infoln("[Service.Subscriber] published response successfully")
 	}
 }
 

@@ -53,7 +53,7 @@ func newSubscription(topic string, handler platform.ConsumerHandler) *subscripti
 		totalWorkers: 0,
 	}
 
-	logger.Printf("[newSubscription] creating '%s' subscription worker pool", topic)
+	logger.Debugf("[newSubscription] creating '%s' subscription worker pool", topic)
 
 	// TODO: Determine an ideal worker pool
 	for i := 0; i < MAX_WORKERS; i++ {

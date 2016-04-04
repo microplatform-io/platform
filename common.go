@@ -2,8 +2,8 @@ package platform
 
 import (
 	"errors"
+	"fmt"
 	"io/ioutil"
-	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -11,18 +11,41 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kr/pretty"
+
+	"github.com/Sirupsen/logrus"
+
 	"github.com/pborman/uuid"
 )
 
 var (
 	cachedIp string
 
-	loggers      = map[string]*log.Logger{}
+	loggers      = map[string]*Logger{}
 	loggersMutex = sync.Mutex{}
 
 	logger                  = GetLogger("platform")
 	PREVENT_PLATFORM_PANICS = Getenv("PLATFORM_PREVENT_PANICS", "1") == "1"
 )
+
+func init() {
+	switch os.Getenv("LOG_LEVEL") {
+	case "debug":
+		logrus.SetLevel(logrus.DebugLevel)
+	case "info":
+		logrus.SetLevel(logrus.InfoLevel)
+	case "warn":
+		logrus.SetLevel(logrus.WarnLevel)
+	case "error":
+		logrus.SetLevel(logrus.ErrorLevel)
+	case "fatal":
+		logrus.SetLevel(logrus.FatalLevel)
+	case "panic":
+		logrus.SetLevel(logrus.PanicLevel)
+	default:
+		logrus.SetLevel(logrus.ErrorLevel)
+	}
+}
 
 func CreateUUID() string {
 	return uuid.New()
@@ -56,7 +79,35 @@ func Getenv(key, defaultValue string) string {
 	return defaultValue
 }
 
-func GetLogger(prefix string) *log.Logger {
+type Logger struct {
+	*logrus.Logger
+}
+
+func (l *Logger) Print(v ...interface{}) {
+	l.Debug(v...)
+}
+
+func (l *Logger) Printf(format string, v ...interface{}) {
+	l.Debugf(format, v...)
+}
+
+func (l *Logger) Println(v ...interface{}) {
+	l.Debugln(v...)
+}
+
+func (l *Logger) PrettyPrint(a ...interface{}) {
+	l.Debugln(pretty.Sprint(a...))
+}
+
+type DefaultFormatter struct {
+	prefix string
+}
+
+func (f *DefaultFormatter) Format(entry *logrus.Entry) ([]byte, error) {
+	return []byte(fmt.Sprintln("["+f.prefix+"]", entry.Time.Format("01/02/2006 15:04:05.000"), entry.Message)), nil
+}
+
+func GetLogger(prefix string) *Logger {
 	loggersMutex.Lock()
 	defer loggersMutex.Unlock()
 
@@ -64,7 +115,11 @@ func GetLogger(prefix string) *log.Logger {
 		return logger
 	}
 
-	loggers[prefix] = log.New(os.Stdout, "["+prefix+"] ", log.Ldate|log.Ltime|log.Lmicroseconds)
+	logger := logrus.New()
+	logger.Formatter = &DefaultFormatter{prefix}
+	logger.Level = logrus.GetLevel()
+
+	loggers[prefix] = &Logger{logger}
 
 	return loggers[prefix]
 }

@@ -65,7 +65,7 @@ type Service struct {
 }
 
 func (s *Service) AddHandler(path string, handler Handler) {
-	logger.Println("[Service.AddHandler] adding handler", path)
+	logger.Infoln("[Service.AddHandler] adding handler", path)
 
 	s.subscriber.Subscribe("microservice-"+path, ConsumerHandlerFunc(func(body []byte) error {
 		if !s.canAcceptWork() {
@@ -75,11 +75,11 @@ func (s *Service) AddHandler(path string, handler Handler) {
 		s.incrementWorkerPendingJobs()
 		defer s.decrementWorkerPendingJobs()
 
-		logger.Printf("[Service.Subscriber] handling %s request", path)
+		logger.Infof("[Service.Subscriber] handling %s request", path)
 
 		request := &Request{}
 		if err := Unmarshal(body, request); err != nil {
-			logger.Println("[Service.Subscriber] failed to decode request")
+			logger.Errorln("[Service.Subscriber] failed to decode request")
 
 			return nil
 		}
@@ -141,13 +141,13 @@ func (s *Service) Close() error {
 	defer s.mu.Unlock()
 
 	if !s.closed {
-		logger.Println("[Service.Close] service is shutting down")
+		logger.Infoln("[Service.Close] service is shutting down")
 
 		s.closed = true
 
 		close(s.workerQuitChan)
 
-		logger.Printf("[Service.Close] pending jobs: %d", s.workerPendingJobs)
+		logger.Infof("[Service.Close] pending jobs: %d", s.workerPendingJobs)
 
 		if s.workerPendingJobs > 0 {
 			<-s.allWorkersDone
@@ -155,9 +155,9 @@ func (s *Service) Close() error {
 			close(s.allWorkersDone)
 		}
 
-		logger.Println("[Service.Close] all workers have finished")
+		logger.Infoln("[Service.Close] all workers have finished")
 	} else {
-		logger.Println("[Service.Close] service has already been shut down")
+		logger.Infoln("[Service.Close] service has already been shut down")
 	}
 
 	// Something about this helps graceful shut downs, let's look into it more
