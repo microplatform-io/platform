@@ -69,7 +69,7 @@ func (p *Publisher) Publish(topic string, body []byte) error {
 			},
 		)
 		if publishErr == nil {
-			logger.Infof("[Publisher.Publish] published for %s", topic)
+			logger.Printf("[Publisher.Publish] published for %s", topic)
 			return nil
 		}
 

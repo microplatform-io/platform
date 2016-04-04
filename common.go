@@ -43,8 +43,10 @@ func init() {
 	case "panic":
 		logrus.SetLevel(logrus.PanicLevel)
 	default:
-		logrus.SetLevel(logrus.ErrorLevel)
+		logrus.SetLevel(logrus.InfoLevel)
 	}
+
+	logrus.SetFormatter(&DefaultFormatter{"-----"})
 }
 
 func CreateUUID() string {

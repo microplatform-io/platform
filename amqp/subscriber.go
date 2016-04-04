@@ -82,7 +82,7 @@ func (s *Subscriber) run() error {
 	logger.Printf("[Subscriber.run] bootstrapping queue bindings")
 
 	for _, subscription := range s.subscriptions {
-		logger.Infoln("binding", s.queue, "to", subscription.topic)
+		logger.Println("binding", s.queue, "to", subscription.topic)
 		if err := channelInterface.QueueBind(s.queue, subscription.topic, "amq.topic", false, nil); err != nil {
 			logger.Errorf("[Subscriber.run] failed to bind topic to a queue: %s", err)
 			return err
