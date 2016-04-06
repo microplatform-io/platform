@@ -29,7 +29,7 @@ var (
 )
 
 func init() {
-	switch os.Getenv("LOG_LEVEL") {
+	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
 	case "debug":
 		logrus.SetLevel(logrus.DebugLevel)
 	case "info":
