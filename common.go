@@ -11,6 +11,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/kr/pretty"
+
 	"github.com/Sirupsen/logrus"
 
 	"github.com/pborman/uuid"
@@ -97,7 +99,7 @@ func (l *Logger) Println(v ...interface{}) {
 }
 
 func (l *Logger) PrettyPrint(a ...interface{}) {
-	l.Debugln(fmt.Sprint(a...))
+	l.Debugln(pretty.Sprint(a...))
 }
 
 type DefaultFormatter struct {

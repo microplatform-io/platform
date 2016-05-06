@@ -1,0 +1,5 @@
+{
+	"ImportPath": "github.com/microplatform-io/platform/Godeps",
+	"GoVersion": "go1.5",
+	"Deps": []
+}
