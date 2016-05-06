@@ -3,7 +3,6 @@ package platform
 import (
 	"errors"
 
-	"github.com/kr/pretty"
 	. "github.com/smartystreets/goconvey/convey"
 
 	"testing"
@@ -225,7 +224,7 @@ func TestServiceHandler(t *testing.T) {
 		So(mockSubscriber.topicHandlers["microservice-testing"][0].HandleMessage([]byte{}), ShouldBeNil)
 		So(totalHandlerCalls, ShouldEqual, 0)
 
-		pretty.Println(mockPublisher.mockPublishes)
+		// pretty.Println(mockPublisher.mockPublishes)
 
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 1)
 		So(mockPublisher.mockPublishes[0].topic, ShouldEqual, "panic.handler.testing")
