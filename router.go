@@ -27,15 +27,15 @@ type StandardRouter struct {
 	mu               sync.Mutex
 }
 
-func createResponseChanWithError(err *Error) chan *Request {
+func createResponseChanWithError(request *Request, err *Error) chan *Request {
 	responses := make(chan *Request, 1)
 
 	errorBytes, _ := Marshal(err)
 
-	responses <- &Request{
+	responses <- GenerateResponse(request, &Request{
 		Routing: RouteToUri("resource:///platform/reply/error"),
 		Payload: errorBytes,
-	}
+	})
 
 	return responses
 }
@@ -47,21 +47,21 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 		request.Uuid = String("request-" + CreateUUID())
 	}
 
-	requestUuidSuffix := "::" + strconv.Itoa(int(time.Now().UnixNano()))
+	requestUUIDSuffix := "::" + strconv.Itoa(int(time.Now().UnixNano()))
 
-	request.Uuid = String(request.GetUuid() + requestUuidSuffix)
+	request.Uuid = String(request.GetUuid() + requestUUIDSuffix)
 
-	requestUuid := request.GetUuid()
-	requestUri := ""
+	requestUUID := request.GetUuid()
+	requestURI := ""
 	if len(request.GetRouting().GetRouteTo()) > 0 {
-		requestUri = request.GetRouting().GetRouteTo()[0].GetUri()
+		requestURI = request.GetRouting().GetRouteTo()[0].GetUri()
 	}
 
-	parsedUri, err := url.Parse(requestUri)
+	parsedURI, err := url.Parse(requestURI)
 	if err != nil {
-		logger.Errorf("[StandardRouter.Route] %s - %s - Failed to parse the request uri: %s", requestUuid, requestUri, err)
+		logger.Errorf("[StandardRouter.Route] %s - %s - Failed to parse the request uri: %s", requestUUID, requestURI, err)
 
-		return createResponseChanWithError(&Error{
+		return createResponseChanWithError(request, &Error{
 			Message: String(fmt.Sprintf("Failed to parse the RouteTo URI: %s", err)),
 		}), nil
 	}
@@ -72,12 +72,12 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 		})
 	}
 
-	logger.Infof("[StandardRouter.Route]          routing %s request", requestUri)
-	logger.Printf("[StandardRouter.Route] %s - %s - routing request: %s", requestUuid, requestUri, request)
+	logger.Infof("[StandardRouter.Route]          routing %s request", requestURI)
+	logger.Printf("[StandardRouter.Route] %s - %s - routing request: %s", requestUUID, requestURI, request)
 
 	payload, err := Marshal(request)
 	if err != nil {
-		logger.Errorf("[StandardRouter.Route] %s - %s - failed to marshal request payload: %s", requestUuid, requestUri, err)
+		logger.Errorf("[StandardRouter.Route] %s - %s - failed to marshal request payload: %s", requestUUID, requestURI, err)
 	}
 
 	internalResponses := make(chan *Request, 5)
@@ -85,7 +85,7 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 	streamTimeout := make(chan interface{})
 
 	sr.mu.Lock()
-	sr.pendingResponses[requestUuid] = internalResponses
+	sr.pendingResponses[requestUUID] = internalResponses
 	sr.mu.Unlock()
 
 	go func() {
@@ -102,40 +102,40 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 					responseUri = response.GetRouting().GetRouteTo()[0].GetUri()
 				}
 
-				logger.Printf("[StandardRouter.Route] %s - %s - %s - received an internal response", requestUuid, requestUri, responseUri)
+				logger.Printf("[StandardRouter.Route] %s - %s - %s - received an internal response", requestUUID, requestURI, responseUri)
 
 				// Internal requests shouldn't have to deal with heartbeats from other services
 				if IsInternalRequest(request) && responseUri == "resource:///heartbeat" {
-					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was an internal request so we will bypass sending the heartbeat", requestUuid, requestUri, responseUri)
+					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was an internal request so we will bypass sending the heartbeat", requestUUID, requestURI, responseUri)
 					continue
 				}
 
 				// Remove the request uuid suffix to ensure proper routing on the response
-				response.Uuid = String(strings.Replace(response.GetUuid(), requestUuidSuffix, "", 1))
+				response.Uuid = String(strings.Replace(response.GetUuid(), requestUUIDSuffix, "", 1))
 
 				select {
 				case responses <- response:
-					logger.Printf("[StandardRouter.Route] %s - %s - %s - successfully notified client of the response", requestUuid, requestUri, responseUri)
+					logger.Printf("[StandardRouter.Route] %s - %s - %s - successfully notified client of the response", requestUUID, requestURI, responseUri)
 				default:
-					logger.Errorf("[StandardRouter.Route] %s - %s - %s - failed to notify client of the response", requestUuid, requestUri, responseUri)
+					logger.Errorf("[StandardRouter.Route] %s - %s - %s - failed to notify client of the response", requestUUID, requestURI, responseUri)
 				}
 
 				if response.GetCompleted() {
 					logger.Infof("[StandardRouter.Route]          received response")
-					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was the final response, shutting down the goroutine", requestUuid, requestUri, responseUri)
+					logger.Printf("[StandardRouter.Route] %s - %s - %s - this was the final response, shutting down the goroutine", requestUUID, requestURI, responseUri)
 					return
 				}
 
 			case <-timer.C:
 				select {
 				case streamTimeout <- nil:
-					logger.Printf("[StandardRouter.Route] %s - %s - successfully notified client of authentic stream timeout, shutting down the goroutine", requestUuid, requestUri)
+					logger.Printf("[StandardRouter.Route] %s - %s - successfully notified client of authentic stream timeout, shutting down the goroutine", requestUUID, requestURI)
 				default:
-					logger.Printf("[StandardRouter.Route] %s - %s - failed to notify client of authentic stream timeout, shutting down the goroutine", requestUuid, requestUri)
+					logger.Printf("[StandardRouter.Route] %s - %s - failed to notify client of authentic stream timeout, shutting down the goroutine", requestUUID, requestURI)
 				}
 
 				sr.mu.Lock()
-				delete(sr.pendingResponses, requestUuid)
+				delete(sr.pendingResponses, requestUUID)
 				sr.mu.Unlock()
 
 				return
@@ -143,10 +143,10 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 		}
 	}()
 
-	if err := sr.publisher.Publish(parsedUri.Scheme+"-"+parsedUri.Path, payload); err != nil {
-		logger.Errorf("[StandardRouter.Route] %s - %s - failed to publish request to microservices: %s", requestUuid, requestUri, err)
+	if err := sr.publisher.Publish(parsedURI.Scheme+"-"+parsedURI.Path, payload); err != nil {
+		logger.Errorf("[StandardRouter.Route] %s - %s - failed to publish request to microservices: %s", requestUUID, requestURI, err)
 
-		return createResponseChanWithError(&Error{
+		return createResponseChanWithError(request, &Error{
 			Message: String(fmt.Sprintf("Failed to publish request to microservices: %s", err)),
 		}), nil
 	}
