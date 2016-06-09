@@ -116,7 +116,7 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 				select {
 				case responses <- response:
 					logger.Printf("[StandardRouter.Route] %s - %s - %s - successfully notified client of the response", requestUUID, requestURI, responseUri)
-				default:
+				case <-time.After(5 * time.Second):
 					logger.Errorf("[StandardRouter.Route] %s - %s - %s - failed to notify client of the response", requestUUID, requestURI, responseUri)
 				}
 
@@ -127,12 +127,7 @@ func (sr *StandardRouter) Route(originalRequest *Request) (chan *Request, chan i
 				}
 
 			case <-timer.C:
-				select {
-				case streamTimeout <- nil:
-					logger.Printf("[StandardRouter.Route] %s - %s - successfully notified client of authentic stream timeout, shutting down the goroutine", requestUUID, requestURI)
-				default:
-					logger.Printf("[StandardRouter.Route] %s - %s - failed to notify client of authentic stream timeout, shutting down the goroutine", requestUUID, requestURI)
-				}
+				close(streamTimeout)
 
 				sr.mu.Lock()
 				delete(sr.pendingResponses, requestUUID)
