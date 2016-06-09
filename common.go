@@ -43,7 +43,7 @@ func init() {
 	case "panic":
 		logrus.SetLevel(logrus.PanicLevel)
 	default:
-		logrus.SetLevel(logrus.InfoLevel)
+		logrus.SetLevel(logrus.DebugLevel)
 	}
 
 	logrus.SetOutput(os.Stdout)
