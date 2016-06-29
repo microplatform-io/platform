@@ -1,6 +1,8 @@
 package platform
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
@@ -102,12 +104,50 @@ func (l *Logger) PrettyPrint(a ...interface{}) {
 	l.Debugln(pretty.Sprint(a...))
 }
 
+// Copied from logrus to prevent field naming conflicts in the JSON formatting
+func prefixFieldClashes(data logrus.Fields) {
+	if t, ok := data["time"]; ok {
+		data["fields.time"] = t
+	}
+
+	if m, ok := data["msg"]; ok {
+		data["fields.msg"] = m
+	}
+
+	if l, ok := data["level"]; ok {
+		data["fields.level"] = l
+	}
+}
+
 type DefaultFormatter struct {
 	prefix string
 }
 
 func (f *DefaultFormatter) Format(entry *logrus.Entry) ([]byte, error) {
-	return []byte(fmt.Sprintln("["+f.prefix+"]", entry.Time.Format("01/02/2006 15:04:05.000"), entry.Message)), nil
+	data := make(logrus.Fields, len(entry.Data)+3)
+	for k, v := range entry.Data {
+		switch v := v.(type) {
+		case error:
+			// Otherwise errors are ignored by `encoding/json`
+			// https://github.com/Sirupsen/logrus/issues/137
+			data[k] = v.Error()
+		default:
+			data[k] = v
+		}
+	}
+	prefixFieldClashes(data)
+
+	data["time"] = entry.Time.Format("01/02/2006 15:04:05.000")
+	data["msg"] = entry.Message
+	data["level"] = entry.Level.String()
+
+	buffer := bytes.Buffer{}
+	buffer.WriteString("[" + f.prefix + "] ")
+	if err := json.NewEncoder(&buffer).Encode(data); err != nil {
+		return nil, fmt.Errorf("Failed to marshal fields to JSON, %v", err)
+	}
+
+	return buffer.Bytes(), nil
 }
 
 func GetLogger(prefix string) *Logger {
