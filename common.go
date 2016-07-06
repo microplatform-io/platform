@@ -13,10 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/kr/pretty"
-
 	"github.com/Sirupsen/logrus"
-
+	"github.com/kr/pretty"
 	"github.com/pborman/uuid"
 )
 

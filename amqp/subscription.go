@@ -1,10 +1,8 @@
 package amqp
 
 import (
-	"sync/atomic"
-
 	"github.com/microplatform-io/platform"
-	"github.com/streadway/amqp"
+	"sync"
 )
 
 const MAX_WORKERS = 50
@@ -13,16 +11,18 @@ type subscription struct {
 	topic        string
 	handler      platform.ConsumerHandler
 	closed       bool
-	deliveries   chan amqp.Delivery
-	totalWorkers int32
+	deliveries   chan DeliveryInterface
+	totalWorkers int
+
+	mu sync.Mutex
 }
 
-func (s *subscription) canHandle(msg amqp.Delivery) bool {
+func (s *subscription) canHandle(msg DeliveryInterface) bool {
 	if s.topic == "" {
 		return true
 	}
 
-	return s.topic == msg.RoutingKey
+	return s.topic == msg.GetRoutingKey()
 }
 
 func (s *subscription) Close() error {
@@ -35,21 +35,24 @@ func (s *subscription) Close() error {
 }
 
 func (s *subscription) runWorker() {
-	atomic.AddInt32(&s.totalWorkers, 1)
+	s.mu.Lock()
+	s.totalWorkers += 1
+	s.mu.Unlock()
 
 	for msg := range s.deliveries {
-		s.handler.HandleMessage(msg.Body)
-		msg.Ack(false)
+		s.handler.HandleMessage(msg.GetBody())
 	}
 
-	atomic.AddInt32(&s.totalWorkers, -1)
+	s.mu.Lock()
+	s.totalWorkers -= 1
+	s.mu.Unlock()
 }
 
 func newSubscription(topic string, handler platform.ConsumerHandler) *subscription {
 	s := &subscription{
 		topic:        topic,
 		handler:      handler,
-		deliveries:   make(chan amqp.Delivery, MAX_WORKERS),
+		deliveries:   make(chan DeliveryInterface, MAX_WORKERS),
 		totalWorkers: 0,
 	}
 

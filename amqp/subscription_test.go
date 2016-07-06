@@ -6,16 +6,15 @@ import (
 
 	"github.com/microplatform-io/platform"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/streadway/amqp"
 )
 
 func TestSubscriptionCanHandle(t *testing.T) {
 	Convey("A subscription without a topic should be able to handle any delivery", t, func() {
 		subscription := &subscription{}
 
-		So(subscription.canHandle(amqp.Delivery{}), ShouldBeTrue)
+		So(subscription.canHandle(&mockDelivery{}), ShouldBeTrue)
 
-		So(subscription.canHandle(amqp.Delivery{
+		So(subscription.canHandle(&mockDelivery{
 			RoutingKey: "whatever",
 		}), ShouldBeTrue)
 	})
@@ -25,11 +24,11 @@ func TestSubscriptionCanHandle(t *testing.T) {
 			topic: "success",
 		}
 
-		So(subscription.canHandle(amqp.Delivery{
+		So(subscription.canHandle(&mockDelivery{
 			RoutingKey: "failure",
 		}), ShouldBeFalse)
 
-		So(subscription.canHandle(amqp.Delivery{
+		So(subscription.canHandle(&mockDelivery{
 			RoutingKey: "success",
 		}), ShouldBeTrue)
 	})
@@ -38,7 +37,7 @@ func TestSubscriptionCanHandle(t *testing.T) {
 func TestSubscriptionRunWorker(t *testing.T) {
 	Convey("Running a subscription with a msg chan that immediately closes should return", t, func() {
 		subscription := &subscription{
-			deliveries: make(chan amqp.Delivery),
+			deliveries: make(chan DeliveryInterface),
 		}
 
 		runEnded := make(chan interface{})
@@ -73,14 +72,14 @@ func TestSubscriptionRunWorker(t *testing.T) {
 
 				return nil
 			}),
-			deliveries: make(chan amqp.Delivery),
+			deliveries: make(chan DeliveryInterface),
 		}
 
 		So(totalInvocations, ShouldEqual, 0)
 
 		go func() {
-			subscription.deliveries <- amqp.Delivery{}
-			subscription.deliveries <- amqp.Delivery{}
+			subscription.deliveries <- &mockDelivery{}
+			subscription.deliveries <- &mockDelivery{}
 			close(subscription.deliveries)
 		}()
 
@@ -108,7 +107,7 @@ func TestNewSubscription(t *testing.T) {
 			return nil
 		}))
 
-		So(subscription.totalWorkers, ShouldEqual, 0)
+		So(subscription.totalWorkers, ShouldBeLessThan, MAX_WORKERS)
 
 		time.Sleep(time.Millisecond)
 

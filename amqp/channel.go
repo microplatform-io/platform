@@ -9,7 +9,7 @@ import (
 
 type ChannelInterface interface {
 	Close() error
-	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error)
+	Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan DeliveryInterface, error)
 	NotifyClose(c chan *amqp.Error) chan *amqp.Error
 	Publish(exchange, key string, mandatory, immediate bool, msg amqp.Publishing) error
 	QueueBind(name, key, exchange string, noWait bool, args amqp.Table) error
@@ -24,8 +24,20 @@ func (ch *Channel) Close() error {
 	return ch.channel.Close()
 }
 
-func (ch *Channel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
-	return ch.channel.Consume(queue, consumer, autoAck, exclusive, noLocal, noWait, args)
+func (ch *Channel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan DeliveryInterface, error) {
+	deliveries, err := ch.channel.Consume(queue, consumer, autoAck, exclusive, noLocal, noWait, args)
+	if err != nil {
+		return nil, err
+	}
+
+	deliveriesInterfaceChan := make(chan DeliveryInterface)
+	go func() {
+		for d := range deliveries {
+			deliveriesInterfaceChan <- Delivery{d}
+		}
+	}()
+
+	return (<-chan DeliveryInterface)(deliveriesInterfaceChan), nil
 }
 
 func (ch *Channel) NotifyClose(c chan *amqp.Error) chan *amqp.Error {
@@ -88,9 +100,11 @@ type mockChannel struct {
 	mockQueueBinds    []mockQueueBind
 	mockQueueDeclares []mockQueueDeclare
 
-	closed         bool
-	mockDeliveries chan amqp.Delivery
-	publishErrors  []error
+	closed             bool
+	mockDeliveries     chan DeliveryInterface
+	publishErrors      []error
+	queueBindErrors    []error
+	queueDeclareErrors []error
 }
 
 func (ch *mockChannel) Close() error {
@@ -107,7 +121,7 @@ func (ch *mockChannel) Close() error {
 	return nil
 }
 
-func (ch *mockChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan amqp.Delivery, error) {
+func (ch *mockChannel) Consume(queue, consumer string, autoAck, exclusive, noLocal, noWait bool, args amqp.Table) (<-chan DeliveryInterface, error) {
 	if ch.closed {
 		return nil, errors.New("mock channel has been closed")
 	}
@@ -127,6 +141,18 @@ func (ch *mockChannel) Consume(queue, consumer string, autoAck, exclusive, noLoc
 
 func (ch *mockChannel) errorOnPublish(err error) *mockChannel {
 	ch.publishErrors = append(ch.publishErrors, err)
+
+	return ch
+}
+
+func (ch *mockChannel) errorOnQueueBind(err error) *mockChannel {
+	ch.queueBindErrors = append(ch.queueBindErrors, err)
+
+	return ch
+}
+
+func (ch *mockChannel) errorOnQueueDeclare(err error) *mockChannel {
+	ch.queueDeclareErrors = append(ch.queueDeclareErrors, err)
 
 	return ch
 }
@@ -169,6 +195,14 @@ func (ch *mockChannel) QueueBind(name, key, exchange string, noWait bool, args a
 		return errors.New("mock channel has been closed")
 	}
 
+	if len(ch.queueBindErrors) > 0 {
+		queueBindError := ch.queueBindErrors[0]
+
+		ch.queueBindErrors = ch.queueBindErrors[1:]
+
+		return queueBindError
+	}
+
 	ch.mockQueueBinds = append(ch.mockQueueBinds, mockQueueBind{
 		name:     name,
 		key:      key,
@@ -183,6 +217,14 @@ func (ch *mockChannel) QueueBind(name, key, exchange string, noWait bool, args a
 func (ch *mockChannel) QueueDeclare(name string, durable, autoDelete, exclusive, noWait bool, args amqp.Table) (amqp.Queue, error) {
 	if ch.closed {
 		return amqp.Queue{}, errors.New("mock channel has been closed")
+	}
+
+	if len(ch.queueDeclareErrors) > 0 {
+		queueDeclareError := ch.queueDeclareErrors[0]
+
+		ch.queueDeclareErrors = ch.queueDeclareErrors[1:]
+
+		return amqp.Queue{}, queueDeclareError
 	}
 
 	ch.mockQueueDeclares = append(ch.mockQueueDeclares, mockQueueDeclare{
@@ -205,6 +247,6 @@ func newMockChannel() *mockChannel {
 		mockQueueBinds:    []mockQueueBind{},
 		mockQueueDeclares: []mockQueueDeclare{},
 
-		mockDeliveries: make(chan amqp.Delivery),
+		mockDeliveries: make(chan DeliveryInterface),
 	}
 }

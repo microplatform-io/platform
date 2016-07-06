@@ -2,6 +2,7 @@ package amqp
 
 import (
 	"errors"
+	"github.com/Sirupsen/logrus"
 	"time"
 
 	"github.com/microplatform-io/platform"
@@ -37,59 +38,87 @@ func (s *Subscriber) Close() error {
 	return nil
 }
 
+// This method will use the subscriber's queue name as the queue to bind to
+// and then manage the binding of that queue to every subscription bound to
+// this subscriber.
+func (s *Subscriber) queueBind(channelInterface ChannelInterface) error {
+	if channelInterface == nil {
+		return errors.New("Nil channel interface")
+	}
+
+	for i := range s.subscriptions {
+		logger.WithFields(logrus.Fields{
+			"queue": s.queue,
+			"topic": s.subscriptions[i].topic,
+		}).Debug("binding the queue to a topic")
+
+		if err := channelInterface.QueueBind(s.queue, s.subscriptions[i].topic, "amq.topic", false, nil); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+
+// Handles the various flags that could be set on the subscriber and properly
+// declares the queue on the channel interface. The creation of the channel
+// interface is not this method's responsibility.
+func (s *Subscriber) queueDeclare(channelInterface ChannelInterface) error {
+	if channelInterface == nil {
+		return errors.New("Nil channel interface")
+	}
+
+	durable := true
+	if s.exclusive {
+		durable = false
+	}
+
+	_, err := channelInterface.QueueDeclare(s.queue, durable, s.autoDelete, s.exclusive, false, nil)
+
+	return err
+}
+
 // Our running of the actual subscriber, where we declare and bind based on the notion of the
-// subscriber and handles the messages. If we recieve a signal that the channel interface is closed
+// subscriber and handles the messages. If we receive a signal that the channel interface is closed
 // we will break out and wait for a new connection.
 func (s *Subscriber) run() error {
-	logger.Printf("[Subscriber.run] bootstrapping connection")
+	entry := logger.WithField("method", "Subscriber.run")
+
+	entry.Debug("Getting a connection interface")
 
 	connectionInterface, err := s.dialerInterface.Dial()
 	if err != nil {
-		logger.Printf("[Subscriber.run] failed to get a connection interface: %s", err)
+		entry.WithError(err).Error("Failed to get a connection interface")
 		return err
 	}
 
 	connectionClosed := connectionInterface.NotifyClose(make(chan *amqp.Error))
 
-	logger.Println("[Subscriber.run] bootstrapping channel using:", connectionInterface)
+	entry.WithField("connection_interface", connectionInterface).Debug("Getting a channel interface")
 
 	channelInterface, err := connectionInterface.GetChannelInterface()
 	if err != nil {
-		logger.Printf("[Subscriber.run] failed to get a channel interface: %s", err)
+		entry.WithError(err).Error("Failed to get a channel interface")
 		return err
 	}
 
 	channelInterfaceClosed := channelInterface.NotifyClose(make(chan *amqp.Error))
 
-	durable := true
-	autoDelete := false
+	entry.Debug("Declaring the queue")
 
-	if s.exclusive {
-		durable = false
-	}
-
-	if s.autoDelete {
-		autoDelete = true
-	}
-
-	logger.Printf("[Subscriber.run] bootstrapping queue")
-
-	if _, err := channelInterface.QueueDeclare(s.queue, durable, autoDelete, s.exclusive, false, nil); err != nil {
-		logger.Printf("[Subscriber.run] failed to declare a queue: %s", err)
+	if err := s.queueDeclare(channelInterface); err != nil {
+		entry.WithError(err).Error("Failed to declare the queue")
 		return err
 	}
 
-	logger.Printf("[Subscriber.run] bootstrapping queue bindings")
+	entry.Debug("Binding the queue")
 
-	for _, subscription := range s.subscriptions {
-		logger.Println("binding", s.queue, "to", subscription.topic)
-		if err := channelInterface.QueueBind(s.queue, subscription.topic, "amq.topic", false, nil); err != nil {
-			logger.Errorf("[Subscriber.run] failed to bind topic to a queue: %s", err)
-			return err
-		}
+	if err := s.queueBind(channelInterface); err != nil {
+		entry.WithError(err).Error("Failed to bind the queue")
+		return err
 	}
 
-	logger.Println("[Subscriber.run] After finished binding")
+	entry.Debug("Consuming messages from the channel interface")
 
 	msgs, err := channelInterface.Consume(
 		s.queue,     // queue
@@ -101,6 +130,7 @@ func (s *Subscriber) run() error {
 		nil,         // args
 	)
 	if err != nil {
+		entry.WithError(err).Error("Failed to consume messages from the channel interface")
 		return err
 	}
 
@@ -114,33 +144,47 @@ func (s *Subscriber) run() error {
 	for iterate {
 		select {
 		case msg := <-msgs:
-			handled := false
+			delivered := false
 
 			for _, subscription := range s.subscriptions {
 				if subscription.canHandle(msg) {
 					select {
 					case subscription.deliveries <- msg:
-						handled = true
+						delivered = true
 
 					default:
 					}
 				}
 			}
 
-			if !handled {
-				msg.Reject(true)
+			msg.Ack(false)
+
+			if !delivered {
+				entry.WithField("message", msg).Error("Failed to handle a message to this subscriber, the topic was not deliverable")
 			}
 
 		case err := <-connectionClosed:
-			logger.Println("[Subscriber.run] An event occurred causing the need for a new connection : ", err)
+			if err != nil {
+				entry.WithError(err).Error("The connection has been closed")
+			} else {
+				entry.Info("The connection has been closed")
+			}
 			iterate = false
 
 		case err := <-channelInterfaceClosed:
-			logger.Println("[Subscriber.run] An event occurred causing the need for a new channelInterface : ", err)
+			if err != nil {
+				entry.WithError(err).Error("The channel has been closed")
+			} else {
+				entry.Info("The channel has been closed")
+			}
 			iterate = false
 
 		case <-s.quit:
-			logger.Println("[Subscriber.run] subscriber has been closed")
+			if err != nil {
+				entry.WithError(err).Error("The subscriber has been closed")
+			} else {
+				entry.Info("The subscriber has been closed")
+			}
 			iterate = false
 
 			return subscriberClosed
@@ -151,20 +195,22 @@ func (s *Subscriber) run() error {
 }
 
 func (s *Subscriber) Run() {
-	logger.Printf("[Subscriber.Run] initiating")
+	entry := logger.WithField("method", "Subscriber.run")
+
+	entry.Debug("Initiating the run goroutine")
 
 	s.started = make(chan interface{})
 
 	go func() {
 		for {
-			logger.Println("[Subscriber.Run] calling private run method.")
+			entry.Debug("Calling private run method")
 
 			if err := s.run(); err != nil {
 				if err == subscriberClosed {
 					return
 				}
 
-				logger.Errorf("[Subscriber.Run] failed to run subscription: %s", err)
+				entry.WithError(err).Error("failed to run subscription: %s", err)
 			}
 
 			// Sleeping for a few milliseconds allows the close event to propagate everywhere

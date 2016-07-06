@@ -7,8 +7,176 @@ import (
 
 	"github.com/microplatform-io/platform"
 	. "github.com/smartystreets/goconvey/convey"
-	"github.com/streadway/amqp"
 )
+
+func TestSubscriberQueueBind(t *testing.T) {
+	Convey("Binding a subscription on a nil channel interface should return an error", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		bindErr := subscriber.queueBind(nil)
+		So(bindErr.Error(), ShouldResemble, "Nil channel interface")
+	})
+
+	Convey("Binding a subscriber without any subscriptions should not actually trigger any binds at the channel level", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		ch := &mockChannel{
+			mockQueueBinds: []mockQueueBind{},
+		}
+
+		So(ch.mockQueueBinds, ShouldResemble, []mockQueueBind{})
+
+		bindErr := subscriber.queueBind(ch)
+		So(bindErr, ShouldBeNil)
+
+		So(ch.mockQueueBinds, ShouldResemble, []mockQueueBind{})
+	})
+
+	Convey("Binding a subscriber on a channel interface return the error if the channel returns one", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		subscriber.Subscribe("testing-topic", nil)
+
+		ch := &mockChannel{
+			mockQueueBinds: []mockQueueBind{},
+		}
+
+		ch.errorOnQueueBind(errors.New("FAILED TO BIND"))
+
+		So(ch.mockQueueBinds, ShouldResemble, []mockQueueBind{})
+
+		bindErr := subscriber.queueBind(ch)
+		So(bindErr, ShouldResemble, errors.New("FAILED TO BIND"))
+
+		So(ch.mockQueueBinds, ShouldResemble, []mockQueueBind{})
+	})
+
+	Convey("Binding a subscriber with a single subscription should trigger a single bind at the channel level", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		subscriber.Subscribe("testing-topic", nil)
+
+		ch := &mockChannel{
+			mockQueueBinds: []mockQueueBind{},
+		}
+
+		So(ch.mockQueueBinds, ShouldResemble, []mockQueueBind{})
+
+		bindErr := subscriber.queueBind(ch)
+		So(bindErr, ShouldBeNil)
+
+		So(ch.mockQueueBinds, ShouldResemble, []mockQueueBind{
+			mockQueueBind{
+				name:     "testing-queue",
+				key:      "testing-topic",
+				exchange: "amq.topic",
+				noWait:   false,
+				args:     nil,
+			},
+		})
+	})
+}
+
+func TestSubscriberQueueDeclare(t *testing.T) {
+	Convey("Declaring a queue on a nil channel interface should return an error", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		declareErr := subscriber.queueDeclare(nil)
+		So(declareErr.Error(), ShouldResemble, "Nil channel interface")
+	})
+
+	Convey("Declaring a queue without any flags intentionally set should establish a set of default values for the declare args", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		ch := &mockChannel{
+			mockQueueDeclares: []mockQueueDeclare{},
+		}
+
+		So(ch.mockQueueDeclares, ShouldResemble, []mockQueueDeclare{})
+
+		declareErr := subscriber.queueDeclare(ch)
+		So(declareErr, ShouldBeNil)
+
+		So(ch.mockQueueDeclares, ShouldResemble, []mockQueueDeclare{
+			mockQueueDeclare{
+				name:       "testing-queue",
+				durable:    true,
+				autoDelete: false,
+				exclusive:  false,
+				noWait:     false,
+				args:       nil,
+			},
+		})
+	})
+
+	Convey("Setting exclusive to true should make the queue exclusive but not durable", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		subscriber.exclusive = true
+
+		ch := &mockChannel{
+			mockQueueDeclares: []mockQueueDeclare{},
+		}
+
+		So(ch.mockQueueDeclares, ShouldResemble, []mockQueueDeclare{})
+
+		declareErr := subscriber.queueDeclare(ch)
+		So(declareErr, ShouldBeNil)
+
+		So(ch.mockQueueDeclares, ShouldResemble, []mockQueueDeclare{
+			mockQueueDeclare{
+				name:       "testing-queue",
+				durable:    false,
+				autoDelete: false,
+				exclusive:  true,
+				noWait:     false,
+				args:       nil,
+			},
+		})
+	})
+
+	Convey("Setting autoDelete to true should set the autoDelete flag to true", t, func() {
+		subscriber, err := NewSubscriber(nil, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		subscriber.autoDelete = true
+
+		ch := &mockChannel{
+			mockQueueDeclares: []mockQueueDeclare{},
+		}
+
+		So(ch.mockQueueDeclares, ShouldResemble, []mockQueueDeclare{})
+
+		declareErr := subscriber.queueDeclare(ch)
+		So(declareErr, ShouldBeNil)
+
+		So(ch.mockQueueDeclares, ShouldResemble, []mockQueueDeclare{
+			mockQueueDeclare{
+				name:       "testing-queue",
+				durable:    true,
+				autoDelete: true,
+				exclusive:  false,
+				noWait:     false,
+				args:       nil,
+			},
+		})
+	})
+}
 
 func TestSubscriberClose(t *testing.T) {
 	Convey("Closing a subscriber that has no subscriptions should simply mark itself as closed", t, func() {
@@ -80,6 +248,7 @@ func TestSubscriberRun(t *testing.T) {
 
 		go func() {
 			<-mockDialer.connected
+			time.Sleep(10 * time.Millisecond)
 			mockDialer.connection.Close()
 		}()
 
@@ -150,15 +319,26 @@ func TestSubscriberRun(t *testing.T) {
 			close(runEnded)
 		}()
 
+		testingTopic1Delivery := &mockDelivery{
+			RoutingKey: "testing-topic-1",
+		}
+
+		testingTopic2Delivery := &mockDelivery{
+			RoutingKey: "testing-topic-2",
+		}
+
+		badRandomDelivery := &mockDelivery{
+			RoutingKey: "unmatched-topic",
+		}
+
 		go func() {
 			<-mockDialer.connected
 
-			mockDialer.connection.channel.mockDeliveries <- amqp.Delivery{
-				RoutingKey: "testing-topic-1",
-			}
-			mockDialer.connection.channel.mockDeliveries <- amqp.Delivery{
-				RoutingKey: "testing-topic-2",
-			}
+			time.Sleep(10 * time.Millisecond)
+
+			mockDialer.connection.channel.mockDeliveries <- testingTopic1Delivery
+			mockDialer.connection.channel.mockDeliveries <- testingTopic2Delivery
+			mockDialer.connection.channel.mockDeliveries <- badRandomDelivery
 
 			mockDialer.connection.Close()
 		}()
@@ -174,7 +354,19 @@ func TestSubscriberRun(t *testing.T) {
 
 		// Ensure that 2 of the 3 handlers were called
 		So(testingTopic1Called, ShouldBeTrue)
+		So(testingTopic1Delivery.acked, ShouldBeTrue)
+		So(testingTopic1Delivery.ackMultiple, ShouldBeFalse)
+		So(testingTopic2Delivery.rejected, ShouldBeFalse)
+
 		So(testingTopic2Called, ShouldBeTrue)
+		So(testingTopic2Delivery.acked, ShouldBeTrue)
+		So(testingTopic2Delivery.ackMultiple, ShouldBeFalse)
+		So(testingTopic2Delivery.rejected, ShouldBeFalse)
+
+		So(badRandomDelivery.acked, ShouldBeTrue)
+		So(badRandomDelivery.ackMultiple, ShouldBeFalse)
+		So(badRandomDelivery.rejected, ShouldBeFalse)
+
 		So(testingTopic3Called, ShouldBeFalse)
 
 		So(mockDialer.totalDials, ShouldEqual, 1)
@@ -236,6 +428,7 @@ func TestSubscriberRun(t *testing.T) {
 
 		go func() {
 			<-mockDialer.connected
+			time.Sleep(10 * time.Millisecond)
 			mockDialer.connection.Close()
 		}()
 
@@ -266,6 +459,7 @@ func TestSubscriberRun(t *testing.T) {
 
 		go func() {
 			<-mockDialer.connected
+			time.Sleep(10 * time.Millisecond)
 			mockDialer.connection.channel.Close()
 		}()
 
