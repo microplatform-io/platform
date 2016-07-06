@@ -60,9 +60,9 @@ func (d Delivery) GetExchange() string                { return d.Exchange }
 func (d Delivery) GetRoutingKey() string              { return d.RoutingKey }
 func (d Delivery) GetBody() []byte                    { return d.Body }
 
-func (d Delivery) Ack(multiple bool) error           { return d.Ack(multiple) }
-func (d Delivery) Nack(multiple, requeue bool) error { return d.Nack(multiple, requeue) }
-func (d Delivery) Reject(requeue bool) error         { return d.Reject(requeue) }
+func (d Delivery) Ack(multiple bool) error           { return d.Delivery.Ack(multiple) }
+func (d Delivery) Nack(multiple, requeue bool) error { return d.Delivery.Nack(multiple, requeue) }
+func (d Delivery) Reject(requeue bool) error         { return d.Delivery.Reject(requeue) }
 
 type mockDelivery struct {
 	Acknowledger    amqp.Acknowledger
