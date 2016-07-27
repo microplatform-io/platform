@@ -144,23 +144,34 @@ func (s *Subscriber) run() error {
 	for iterate {
 		select {
 		case msg := <-msgs:
-			delivered := false
+			couldHandle := false
+			wasHandled := false
 
 			for _, subscription := range s.subscriptions {
 				if subscription.canHandle(msg) {
+					couldHandle = true
+
 					select {
 					case subscription.deliveries <- msg:
-						delivered = true
+						wasHandled = true
 
 					default:
 					}
 				}
 			}
 
-			msg.Ack(false)
+			if couldHandle {
+				if wasHandled {
+					msg.Ack(false)
+				} else {
+					msg.Reject(true)
 
-			if !delivered {
-				entry.WithField("message", msg).Error("Failed to handle a message to this subscriber, the topic was not deliverable")
+					entry.WithField("message", msg).WithField("reason", "busy").Warn("Failed to handle a message to this subscriber")
+				}
+			} else {
+				msg.Ack(false)
+
+				entry.WithField("message", msg).WithField("reason", "undeliverable").Error("Failed to handle a message to this subscriber")
 			}
 
 		case err := <-connectionClosed:

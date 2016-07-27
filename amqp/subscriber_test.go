@@ -284,6 +284,92 @@ func TestSubscriberRun(t *testing.T) {
 		})
 	})
 
+	Convey("Sending a message on a closed subscriber should reject the message", t, func() {
+		mockDialer := newMockDialer()
+
+		subscriber, err := NewSubscriber(mockDialer, "testing-queue")
+		So(subscriber, ShouldNotBeNil)
+		So(err, ShouldBeNil)
+
+		subscriber.Subscribe("testing-topic", platform.ConsumerHandlerFunc(func(body []byte) error {
+			time.Sleep(1 * time.Second)
+
+			return nil
+		}))
+
+		var runErr error
+
+		runEnded := make(chan bool)
+		go func() {
+			runErr = subscriber.run()
+			close(runEnded)
+		}()
+
+		deliveries := []*mockDelivery{}
+
+		go func() {
+			<-mockDialer.connected
+
+			time.Sleep(10 * time.Millisecond)
+
+			// We need to overflow the buffer to simulate a failed delivery, MAX_WORKERS + 1
+			for i := 0; i < MAX_WORKERS+1; i++ {
+				delivery := &mockDelivery{
+					RoutingKey: "testing-topic",
+				}
+
+				deliveries = append(deliveries, delivery)
+
+				mockDialer.connection.channel.mockDeliveries <- delivery
+			}
+
+			mockDialer.connection.Close()
+		}()
+
+		select {
+		case <-runEnded:
+
+		case <-time.After(10 * time.Second):
+			t.Fatal("subscriber did not stop running in a reasonable amount of time")
+		}
+
+		So(runErr, ShouldBeNil)
+
+		So(deliveries[len(deliveries)-1], ShouldNotBeNil)
+		So(deliveries[len(deliveries)-1].acked, ShouldBeFalse)
+		So(deliveries[len(deliveries)-1].ackMultiple, ShouldBeFalse)
+		So(deliveries[len(deliveries)-1].rejected, ShouldBeTrue)
+
+		So(mockDialer.totalDials, ShouldEqual, 1)
+		So(mockDialer.connection.channel.mockQueueDeclares, ShouldResemble, []mockQueueDeclare{
+			mockQueueDeclare{
+				name:       "testing-queue",
+				durable:    true,
+				autoDelete: false,
+				exclusive:  false,
+				noWait:     false,
+			},
+		})
+		So(mockDialer.connection.channel.mockQueueBinds, ShouldResemble, []mockQueueBind{
+			mockQueueBind{
+				name:     "testing-queue",
+				key:      "testing-topic",
+				exchange: "amq.topic",
+				noWait:   false,
+			},
+		})
+		So(mockDialer.connection.channel.mockConsumes, ShouldResemble, []mockConsume{
+			mockConsume{
+				queue:     "testing-queue",
+				consumer:  "",
+				autoAck:   false,
+				exclusive: false,
+				noLocal:   false,
+				noWait:    true,
+			},
+		})
+	})
+
 	Convey("Running a subscriber should dial, declare, bind, and consume", t, func() {
 		mockDialer := newMockDialer()
 

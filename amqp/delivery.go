@@ -139,5 +139,5 @@ func (d *mockDelivery) Reject(requeue bool) error {
 	d.rejected = true
 	d.rejectRequeued = requeue
 
-	return d.Reject(requeue)
+	return nil
 }

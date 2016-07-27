@@ -68,6 +68,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 	logger.Infoln("[Service.AddHandler] adding handler", path)
 
 	s.subscriber.Subscribe("microservice-"+path, ConsumerHandlerFunc(func(body []byte) error {
+		// TODO: This error is ignored at the subscriber level, so therefore this message is permanently lost!
 		if !s.canAcceptWork() {
 			return errors.New("no new work can be accepted")
 		}

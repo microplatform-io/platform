@@ -197,7 +197,7 @@ func TestPublisherPublish(t *testing.T) {
 			}()
 		}()
 
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(50 * time.Millisecond)
 
 		So(publisher.Publish("testing", []byte{}), ShouldResemble, errors.New("failed to publish 3..."))
 

@@ -26,6 +26,9 @@ func (s *subscription) canHandle(msg DeliveryInterface) bool {
 }
 
 func (s *subscription) Close() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if !s.closed {
 		close(s.deliveries)
 		s.closed = true
@@ -52,7 +55,7 @@ func newSubscription(topic string, handler platform.ConsumerHandler) *subscripti
 	s := &subscription{
 		topic:        topic,
 		handler:      handler,
-		deliveries:   make(chan DeliveryInterface, MAX_WORKERS),
+		deliveries:   make(chan DeliveryInterface),
 		totalWorkers: 0,
 	}
 
