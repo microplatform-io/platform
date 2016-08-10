@@ -139,13 +139,27 @@ func (f *DefaultFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	data["msg"] = entry.Message
 	data["level"] = entry.Level.String()
 
-	buffer := bytes.Buffer{}
-	buffer.WriteString("[" + f.prefix + "] ")
-	if err := json.NewEncoder(&buffer).Encode(data); err != nil {
-		return nil, fmt.Errorf("Failed to marshal fields to JSON, %v", err)
+	prefix := "[" + f.prefix + "] "
+	logBytes := []byte{}
+
+	if os.Getenv("LOG_PRETTY_PRINT") == "true" {
+		b, err := json.MarshalIndent(data, prefix, "     ")
+		if err != nil {
+			return nil, fmt.Errorf("Failed to MarshalIndent fields to JSON:", err)
+		}
+
+		logBytes = b
+	} else {
+		buffer := bytes.Buffer{}
+		buffer.WriteString(prefix)
+		if err := json.NewEncoder(&buffer).Encode(data); err != nil {
+			return nil, fmt.Errorf("Failed to marshal fields to JSON, %v", err)
+		}
+
+		logBytes = buffer.Bytes()
 	}
 
-	return buffer.Bytes(), nil
+	return logBytes, nil
 }
 
 func GetLogger(prefix string) *Logger {
