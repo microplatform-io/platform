@@ -54,7 +54,7 @@ func CreateUUID() string {
 	return uuid.New()
 }
 
-func GenerateResponse(request *Request, response *Request) *Request {
+func generateResponse(request *Request, response *Request) *Request {
 	response.Uuid = request.Uuid
 
 	if response.Routing == nil {

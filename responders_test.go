@@ -7,13 +7,13 @@ import (
 	. "github.com/smartystreets/goconvey/convey"
 )
 
-func TestStandardResponseSender(t *testing.T) {
+func TestPublishResponder(t *testing.T) {
 	Convey("Ensure that the response sender uses the publisher", t, func() {
 		mockPublisher := newMockPublisher()
 
-		responseSender := NewStandardResponseSender(mockPublisher)
+		responder := NewPublishResponder(mockPublisher)
 
-		responseSender.Send(&Request{
+		responder.Respond(&Request{
 			Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 			Completed: Bool(false),
 		})
@@ -23,7 +23,7 @@ func TestStandardResponseSender(t *testing.T) {
 
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 1)
 
-		responseSender.Send(&Request{
+		responder.Respond(&Request{
 			Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 			Completed: Bool(true),
 		})
@@ -35,14 +35,14 @@ func TestStandardResponseSender(t *testing.T) {
 	})
 }
 
-func TestRequestHeartbeatResponseSender(t *testing.T) {
+func TestRequestResponder(t *testing.T) {
 	Convey("Ensure that the response sender uses the publisher", t, func() {
 		mockPublisher := newMockPublisher()
 
-		requestHeartbeatResponseSender := NewRequestHeartbeatResponseSender(NewStandardResponseSender(mockPublisher), &Request{})
+		requestResponder := NewRequestResponder(NewPublishResponder(mockPublisher), &Request{})
 
 		// Sending a response that is not completed should still produce heartbeats
-		requestHeartbeatResponseSender.Send(&Request{
+		requestResponder.Respond(&Request{
 			Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 			Completed: Bool(false),
 		})
@@ -51,14 +51,14 @@ func TestRequestHeartbeatResponseSender(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 
 		// Just by waiting for at least 500 milliseconds, we should see a heartbeat published
-		So(requestHeartbeatResponseSender.completed, ShouldBeFalse)
+		So(requestResponder.completed, ShouldBeFalse)
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 1)
 		time.Sleep(750 * time.Millisecond)
-		So(requestHeartbeatResponseSender.completed, ShouldBeFalse)
+		So(requestResponder.completed, ShouldBeFalse)
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 2)
 
 		// By sending a completed response, it should shut down the heartbeats
-		requestHeartbeatResponseSender.Send(&Request{
+		requestResponder.Respond(&Request{
 			Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 			Completed: Bool(true),
 		})
@@ -66,14 +66,14 @@ func TestRequestHeartbeatResponseSender(t *testing.T) {
 		// Let the goroutine send the message
 		time.Sleep(10 * time.Millisecond)
 
-		So(requestHeartbeatResponseSender.completed, ShouldBeTrue)
+		So(requestResponder.completed, ShouldBeTrue)
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 3)
 		time.Sleep(750 * time.Millisecond)
-		So(requestHeartbeatResponseSender.completed, ShouldBeTrue)
+		So(requestResponder.completed, ShouldBeTrue)
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 3)
 
 		// Sending a response after last request was completed should do nothing
-		requestHeartbeatResponseSender.Send(&Request{
+		requestResponder.Respond(&Request{
 			Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 			Completed: Bool(true),
 		})
@@ -81,10 +81,10 @@ func TestRequestHeartbeatResponseSender(t *testing.T) {
 		// Let the goroutine send the message
 		time.Sleep(10 * time.Millisecond)
 
-		So(requestHeartbeatResponseSender.completed, ShouldBeTrue)
+		So(requestResponder.completed, ShouldBeTrue)
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 3)
 		time.Sleep(750 * time.Millisecond)
-		So(requestHeartbeatResponseSender.completed, ShouldBeTrue)
+		So(requestResponder.completed, ShouldBeTrue)
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 3)
 	})
 }

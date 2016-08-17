@@ -10,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
 	. "github.com/smartystreets/goconvey/convey"
 )
 
@@ -32,7 +33,7 @@ func TestCreateUuid(t *testing.T) {
 
 func TestGenerateResponse(t *testing.T) {
 	Convey("Generating a response from an empty request object should populate empty routing", t, func() {
-		response := GenerateResponse(&Request{}, &Request{})
+		response := generateResponse(&Request{}, &Request{})
 		So(response, ShouldResemble, &Request{
 			Routing: &Routing{
 				RouteTo:   []*Route{},
@@ -42,7 +43,7 @@ func TestGenerateResponse(t *testing.T) {
 	})
 
 	Convey("Generating a response from an should place the route from of the request onto the route to of the response", t, func() {
-		response := GenerateResponse(&Request{
+		response := generateResponse(&Request{
 			Routing: &Routing{
 				RouteFrom: []*Route{
 					&Route{
@@ -64,7 +65,7 @@ func TestGenerateResponse(t *testing.T) {
 	})
 
 	Convey("Generating a response from an should place the route from of the request onto the route to of the response", t, func() {
-		response := GenerateResponse(&Request{
+		response := generateResponse(&Request{
 			Routing: &Routing{
 				RouteFrom: []*Route{
 					&Route{

@@ -14,13 +14,13 @@ import (
 )
 
 type Handler interface {
-	Handle(responseSender ResponseSender, request *Request)
+	Handle(responder Responder, request *Request)
 }
 
-type HandlerFunc func(responseSender ResponseSender, request *Request)
+type HandlerFunc func(responder Responder, request *Request)
 
-func (handlerFunc HandlerFunc) Handle(responseSender ResponseSender, request *Request) {
-	handlerFunc(responseSender, request)
+func (handlerFunc HandlerFunc) Handle(responder Responder, request *Request) {
+	handlerFunc(responder, request)
 }
 
 func identifyPanic() string {
@@ -54,7 +54,7 @@ func identifyPanic() string {
 type Service struct {
 	publisher  Publisher
 	subscriber Subscriber
-	courier    ResponseSender
+	responder  Responder
 	name       string
 
 	mu                sync.Mutex
@@ -85,7 +85,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 			return nil
 		}
 
-		requestHeartbeatResponseSender := NewRequestHeartbeatResponseSender(s.courier, request)
+		requestResponder := NewRequestResponder(s.responder, request)
 
 		if PREVENT_PLATFORM_PANICS {
 			defer func() {
@@ -94,18 +94,18 @@ func (s *Service) AddHandler(path string, handler Handler) {
 						Message: String(fmt.Sprintf("A fatal error has occurred. %s: %s %s", path, identifyPanic(), r)),
 					})
 
-					requestHeartbeatResponseSender.Send(GenerateResponse(request, &Request{
+					requestResponder.Respond(&Request{
 						Routing:   RouteToUri("resource:///platform/reply/error"),
 						Payload:   panicErrorBytes,
 						Completed: Bool(true),
-					}))
+					})
 
 					s.publisher.Publish("panic.handler."+path, body)
 				}
 			}()
 		}
 
-		handler.Handle(requestHeartbeatResponseSender, request)
+		handler.Handle(requestResponder, request)
 
 		return nil
 	}))
@@ -203,18 +203,18 @@ func NewService(serviceName string, publisher Publisher, subscriber Subscriber) 
 	return &Service{
 		subscriber:     subscriber,
 		publisher:      publisher,
-		courier:        NewStandardResponseSender(publisher),
+		responder:      NewPublishResponder(publisher),
 		name:           serviceName,
 		workerQuitChan: make(chan interface{}),
 		allWorkersDone: make(chan interface{}),
 	}, nil
 }
 
-func NewServiceWithResponseSender(serviceName string, publisher Publisher, subscriber Subscriber, responseSender ResponseSender) (*Service, error) {
+func NewServiceWithResponder(serviceName string, publisher Publisher, subscriber Subscriber, responder Responder) (*Service, error) {
 	return &Service{
 		subscriber:     subscriber,
 		publisher:      publisher,
-		courier:        responseSender,
+		responder:      responder,
 		name:           serviceName,
 		workerQuitChan: make(chan interface{}),
 		allWorkersDone: make(chan interface{}),

@@ -14,6 +14,9 @@ func getStandardRouterPendingResponsesMatchingUuidPrefix(router *StandardRouter,
 		pendingResponses chan *Request
 	)
 
+	router.mu.Lock()
+	defer router.mu.Unlock()
+
 	for uuid := range router.pendingResponses {
 		if strings.HasPrefix(uuid, requestUuid) {
 			actualUuid = uuid
@@ -35,7 +38,7 @@ func TestNewStandardRouter(t *testing.T) {
 
 		So(router.pendingResponses, ShouldResemble, map[string]chan *Request{})
 
-		responses, timeout := router.Route(&Request{
+		responses, timeout := router.Stream(&Request{
 			Routing: RouteToUri(":///teltech/get/foobar"),
 		})
 
@@ -58,7 +61,7 @@ func TestNewStandardRouter(t *testing.T) {
 
 		So(router.pendingResponses, ShouldResemble, map[string]chan *Request{})
 
-		responses, timeout := router.Route(&Request{
+		responses, timeout := router.Stream(&Request{
 			Uuid:    String(requestUuid),
 			Routing: RouteToUri("microservice:///teltech/get/foobar"),
 		})
@@ -106,7 +109,7 @@ func TestNewStandardRouter(t *testing.T) {
 
 		So(router.pendingResponses, ShouldResemble, map[string]chan *Request{})
 
-		responses, timeout := router.Route(&Request{
+		responses, timeout := router.Stream(&Request{
 			Uuid:    String(requestUuid),
 			Routing: RouteToUri("microservice:///teltech/get/foobar"),
 		})

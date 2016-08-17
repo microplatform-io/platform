@@ -18,7 +18,7 @@ type subscription struct {
 }
 
 func (s *subscription) canHandle(msg DeliveryInterface) bool {
-	if s.topic == "" {
+	if s.topic == "" || s.topic == "#" {
 		return true
 	}
 

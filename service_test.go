@@ -9,16 +9,16 @@ import (
 	"time"
 )
 
-type mockCourier struct {
+type mockResponder struct {
 	requests []*Request
 }
 
-func (c *mockCourier) Send(request *Request) {
-	c.requests = append(c.requests, request)
+func (r *mockResponder) Respond(request *Request) {
+	r.requests = append(r.requests, request)
 }
 
-func newMockCourier() *mockCourier {
-	return &mockCourier{
+func newMockResponder() *mockResponder {
+	return &mockResponder{
 		requests: []*Request{},
 	}
 }
@@ -81,9 +81,9 @@ func TestNewService(t *testing.T) {
 	Convey("Creating a service should simply associate the various bootstrapped properties of a service but not publish / subscribe", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -98,9 +98,9 @@ func TestServiceCanAcceptWork(t *testing.T) {
 	Convey("A service should only not be able to accept work when it is closed", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 
 		So(service.canAcceptWork(), ShouldBeTrue)
@@ -113,9 +113,9 @@ func TestServiceClose(t *testing.T) {
 	Convey("Calling close multiple times should be a safe thing to do", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 		So(service.closed, ShouldBeFalse)
@@ -130,9 +130,9 @@ func TestServiceClose(t *testing.T) {
 	Convey("A service should not be able to close until all if its work is done", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -164,18 +164,18 @@ func TestServiceHandler(t *testing.T) {
 	Convey("Ensure that adding a handler and calling it works properly", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
 		totalHandlerCalls := 0
 
-		service.AddHandler("testing", HandlerFunc(func(responseSender ResponseSender, request *Request) {
+		service.AddHandler("testing", HandlerFunc(func(responder Responder, request *Request) {
 			totalHandlerCalls += 1
 
-			responseSender.Send(&Request{
+			responder.Respond(&Request{
 				Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 				Completed: Bool(true),
 			})
@@ -196,22 +196,22 @@ func TestServiceHandler(t *testing.T) {
 
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 0)
 
-		So(len(mockCourier.requests), ShouldEqual, 1)
-		So(mockCourier.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///teltech/reply/foobar")
+		So(len(mockResponder.requests), ShouldEqual, 1)
+		So(mockResponder.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///teltech/reply/foobar")
 	})
 
 	Convey("A handler that panics should return a platform error", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
 		totalHandlerCalls := 0
 
-		service.AddHandler("testing", HandlerFunc(func(responseSender ResponseSender, request *Request) {
+		service.AddHandler("testing", HandlerFunc(func(responder Responder, request *Request) {
 			panic("YAY FAILURE!")
 		}))
 
@@ -229,25 +229,25 @@ func TestServiceHandler(t *testing.T) {
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 1)
 		So(mockPublisher.mockPublishes[0].topic, ShouldEqual, "panic.handler.testing")
 
-		So(len(mockCourier.requests), ShouldEqual, 1)
-		So(mockCourier.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///platform/reply/error")
+		So(len(mockResponder.requests), ShouldEqual, 1)
+		So(mockResponder.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///platform/reply/error")
 	})
 
 	Convey("Synchronously calling a handler after closing the service should not actually call the handler", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
 		totalHandlerCalls := 0
 
-		service.AddHandler("testing", HandlerFunc(func(responseSender ResponseSender, request *Request) {
+		service.AddHandler("testing", HandlerFunc(func(responder Responder, request *Request) {
 			totalHandlerCalls += 1
 
-			responseSender.Send(&Request{
+			responder.Respond(&Request{
 				Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 				Completed: Bool(true),
 			})
@@ -270,27 +270,27 @@ func TestServiceHandler(t *testing.T) {
 
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 0)
 
-		So(len(mockCourier.requests), ShouldEqual, 1)
-		So(mockCourier.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///teltech/reply/foobar")
+		So(len(mockResponder.requests), ShouldEqual, 1)
+		So(mockResponder.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///teltech/reply/foobar")
 	})
 
 	Convey("Asynchronously calling a handler after closing the service should not actually call the handler", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
 		totalHandlerCalls := 0
 
-		service.AddHandler("testing", HandlerFunc(func(responseSender ResponseSender, request *Request) {
+		service.AddHandler("testing", HandlerFunc(func(responder Responder, request *Request) {
 			time.Sleep(750 * time.Millisecond)
 
 			totalHandlerCalls += 1
 
-			responseSender.Send(&Request{
+			responder.Respond(&Request{
 				Routing:   RouteToUri("resource:///teltech/reply/foobar"),
 				Completed: Bool(true),
 			})
@@ -358,9 +358,9 @@ func TestServiceHandler(t *testing.T) {
 
 		So(len(mockPublisher.mockPublishes), ShouldEqual, 0)
 
-		So(len(mockCourier.requests), ShouldEqual, 2)
-		So(mockCourier.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///heartbeat")
-		So(mockCourier.requests[1].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///teltech/reply/foobar")
+		So(len(mockResponder.requests), ShouldEqual, 2)
+		So(mockResponder.requests[0].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///heartbeat")
+		So(mockResponder.requests[1].Routing.RouteTo[0].GetUri(), ShouldEqual, "resource:///teltech/reply/foobar")
 	})
 }
 
@@ -368,9 +368,9 @@ func TestServiceListener(t *testing.T) {
 	Convey("Ensure that adding a listener and calling it works properly", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -396,9 +396,9 @@ func TestServiceListener(t *testing.T) {
 	Convey("A listener that panics should publish an error", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -429,9 +429,9 @@ func TestServiceRun(t *testing.T) {
 	Convey("A service's Run call return if the service is successfully closed", t, func() {
 		mockPublisher := newMockPublisher()
 		mockSubscriber := newMockSubscriber()
-		mockCourier := newMockCourier()
+		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponseSender("test-service", mockPublisher, mockSubscriber, mockCourier)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
 		So(err, ShouldBeNil)
 
 		go func() {
