@@ -2,9 +2,9 @@ package amqp
 
 import (
 	"errors"
-	"github.com/Sirupsen/logrus"
 	"time"
 
+	"github.com/Sirupsen/logrus"
 	"github.com/microplatform-io/platform"
 	"github.com/streadway/amqp"
 )

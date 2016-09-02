@@ -111,20 +111,9 @@ func TestGetenv(t *testing.T) {
 }
 
 func TestGetLogger(t *testing.T) {
-	Convey("Get logger should always return a non nil logger, and should cache that logger by key", t, func() {
+	Convey("Get logger should always return a non nil logger", t, func() {
 		logger1 := GetLogger("testing")
 		So(logger1, ShouldNotBeNil)
-
-		logger2 := GetLogger("testing")
-		So(logger2, ShouldNotBeNil)
-
-		So(logger1, ShouldEqual, logger2)
-	})
-
-	Convey("Getting an environment variable that does exist should resort to the value that was set", t, func() {
-		os.Setenv("TEST_GET_ENV", "HELLO")
-
-		So(Getenv("TEST_GET_ENV", "DEFAULT_VALUE"), ShouldEqual, "HELLO")
 	})
 }
 

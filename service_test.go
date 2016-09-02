@@ -13,8 +13,10 @@ type mockResponder struct {
 	requests []*Request
 }
 
-func (r *mockResponder) Respond(request *Request) {
+func (r *mockResponder) Respond(request *Request) error {
 	r.requests = append(r.requests, request)
+
+	return nil
 }
 
 func newMockResponder() *mockResponder {
@@ -83,7 +85,7 @@ func TestNewService(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -100,7 +102,7 @@ func TestServiceCanAcceptWork(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 
 		So(service.canAcceptWork(), ShouldBeTrue)
@@ -115,7 +117,7 @@ func TestServiceClose(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 		So(service.closed, ShouldBeFalse)
@@ -132,7 +134,7 @@ func TestServiceClose(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -166,7 +168,7 @@ func TestServiceHandler(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -205,7 +207,7 @@ func TestServiceHandler(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -238,7 +240,7 @@ func TestServiceHandler(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -279,7 +281,7 @@ func TestServiceHandler(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -370,7 +372,7 @@ func TestServiceListener(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -398,7 +400,7 @@ func TestServiceListener(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 		So(service, ShouldNotBeNil)
 
@@ -431,7 +433,7 @@ func TestServiceRun(t *testing.T) {
 		mockSubscriber := newMockSubscriber()
 		mockResponder := newMockResponder()
 
-		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, mockResponder)
+		service, err := NewServiceWithResponder("test-service", mockPublisher, mockSubscriber, nil, mockResponder)
 		So(err, ShouldBeNil)
 
 		go func() {

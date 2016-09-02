@@ -14,14 +14,13 @@ import (
 	"time"
 
 	"github.com/Sirupsen/logrus"
-	"github.com/kr/pretty"
 	"github.com/pborman/uuid"
 )
 
 var (
 	cachedIp string
 
-	loggers      = map[string]*Logger{}
+	loggers      = map[string]*logrus.Logger{}
 	loggersMutex = sync.Mutex{}
 
 	logger                  = GetLogger("platform")
@@ -47,7 +46,7 @@ func init() {
 	}
 
 	logrus.SetOutput(os.Stdout)
-	logrus.SetFormatter(&DefaultFormatter{"-----"})
+	logrus.SetFormatter(&DefaultFormatter{})
 }
 
 func CreateUUID() string {
@@ -56,6 +55,7 @@ func CreateUUID() string {
 
 func generateResponse(request *Request, response *Request) *Request {
 	response.Uuid = request.Uuid
+	response.Trace = request.Trace
 
 	if response.Routing == nil {
 		response.Routing = &Routing{}
@@ -82,43 +82,22 @@ func Getenv(key, defaultValue string) string {
 	return defaultValue
 }
 
-type Logger struct {
-	*logrus.Logger
-}
-
-func (l *Logger) Print(v ...interface{}) {
-	l.Debug(v...)
-}
-
-func (l *Logger) Printf(format string, v ...interface{}) {
-	l.Debugf(format, v...)
-}
-
-func (l *Logger) Println(v ...interface{}) {
-	l.Debugln(v...)
-}
-
-func (l *Logger) PrettyPrint(a ...interface{}) {
-	l.Debugln(pretty.Sprint(a...))
-}
-
 // Copied from logrus to prevent field naming conflicts in the JSON formatting
 func prefixFieldClashes(data logrus.Fields) {
-	if t, ok := data["time"]; ok {
-		data["fields.time"] = t
+	if t, ok := data["timestamp"]; ok {
+		data["fields.timestamp"] = t
 	}
 
 	if m, ok := data["msg"]; ok {
 		data["fields.msg"] = m
 	}
 
-	if l, ok := data["level"]; ok {
-		data["fields.level"] = l
+	if l, ok := data["severity"]; ok {
+		data["fields.severity"] = l
 	}
 }
 
 type DefaultFormatter struct {
-	prefix string
 }
 
 func (f *DefaultFormatter) Format(entry *logrus.Entry) ([]byte, error) {
@@ -135,23 +114,21 @@ func (f *DefaultFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	}
 	prefixFieldClashes(data)
 
-	data["time"] = entry.Time.Format("01/02/2006 15:04:05.000")
+	data["timestamp"] = entry.Time.Format("01/02/2006 15:04:05.000")
 	data["msg"] = entry.Message
-	data["level"] = entry.Level.String()
+	data["severity"] = entry.Level.String()
 
-	prefix := "[" + f.prefix + "] "
 	logBytes := []byte{}
 
 	if os.Getenv("LOG_PRETTY_PRINT") == "true" {
-		b, err := json.MarshalIndent(data, prefix, "     ")
+		b, err := json.MarshalIndent(data, "", "     ")
 		if err != nil {
-			return nil, fmt.Errorf("Failed to MarshalIndent fields to JSON:", err)
+			return nil, fmt.Errorf("Failed to MarshalIndent fields to JSON: %s", err)
 		}
 
 		logBytes = b
 	} else {
 		buffer := bytes.Buffer{}
-		buffer.WriteString(prefix)
 		if err := json.NewEncoder(&buffer).Encode(data); err != nil {
 			return nil, fmt.Errorf("Failed to marshal fields to JSON, %v", err)
 		}
@@ -162,22 +139,17 @@ func (f *DefaultFormatter) Format(entry *logrus.Entry) ([]byte, error) {
 	return logBytes, nil
 }
 
-func GetLogger(prefix string) *Logger {
-	loggersMutex.Lock()
-	defer loggersMutex.Unlock()
-
-	if logger, exists := loggers[prefix]; exists {
-		return logger
-	}
-
+func GetLogger(prefix string) *logrus.Logger {
 	logger := logrus.New()
-	logger.Formatter = &DefaultFormatter{prefix}
+	if strings.ToLower(os.Getenv("LOG_FORMATTER")) == "text" {
+		logger.Formatter = &logrus.TextFormatter{}
+	} else {
+		logger.Formatter = &DefaultFormatter{}
+	}
 	logger.Level = logrus.GetLevel()
 	logger.Out = os.Stdout
 
-	loggers[prefix] = &Logger{logger}
-
-	return loggers[prefix]
+	return logger
 }
 
 func getMyIp(client *http.Client, timeout time.Duration) (string, error) {

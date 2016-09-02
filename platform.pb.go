@@ -19,6 +19,8 @@ It has these top-level messages:
 	RouterConfig
 	RouterConfigList
 	ServiceRoute
+	Trace
+	TraceList
 */
 package platform
 
@@ -30,6 +32,10 @@ import math "math"
 var _ = proto.Marshal
 var _ = fmt.Errorf
 var _ = math.Inf
+
+// This is a compile-time assertion to ensure that this generated file
+// is compatible with the proto package it is being compiled against.
+const _ = proto.ProtoPackageIsVersion1
 
 type IpAddress_Version int32
 
@@ -63,6 +69,7 @@ func (x *IpAddress_Version) UnmarshalJSON(data []byte) error {
 	*x = IpAddress_Version(value)
 	return nil
 }
+func (IpAddress_Version) EnumDescriptor() ([]byte, []int) { return fileDescriptor0, []int{3, 0} }
 
 type RouterConfig_RouterType int32
 
@@ -99,6 +106,7 @@ func (x *RouterConfig_RouterType) UnmarshalJSON(data []byte) error {
 	*x = RouterConfig_RouterType(value)
 	return nil
 }
+func (RouterConfig_RouterType) EnumDescriptor() ([]byte, []int) { return fileDescriptor0, []int{7, 0} }
 
 type RouterConfig_ProtocolType int32
 
@@ -132,6 +140,7 @@ func (x *RouterConfig_ProtocolType) UnmarshalJSON(data []byte) error {
 	*x = RouterConfig_ProtocolType(value)
 	return nil
 }
+func (RouterConfig_ProtocolType) EnumDescriptor() ([]byte, []int) { return fileDescriptor0, []int{7, 1} }
 
 type Documentation struct {
 	Description      *string         `protobuf:"bytes,1,opt,name=description" json:"description,omitempty"`
@@ -139,9 +148,10 @@ type Documentation struct {
 	XXX_unrecognized []byte          `json:"-"`
 }
 
-func (m *Documentation) Reset()         { *m = Documentation{} }
-func (m *Documentation) String() string { return proto.CompactTextString(m) }
-func (*Documentation) ProtoMessage()    {}
+func (m *Documentation) Reset()                    { *m = Documentation{} }
+func (m *Documentation) String() string            { return proto.CompactTextString(m) }
+func (*Documentation) ProtoMessage()               {}
+func (*Documentation) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{0} }
 
 func (m *Documentation) GetDescription() string {
 	if m != nil && m.Description != nil {
@@ -162,9 +172,10 @@ type DocumentationList struct {
 	XXX_unrecognized []byte           `json:"-"`
 }
 
-func (m *DocumentationList) Reset()         { *m = DocumentationList{} }
-func (m *DocumentationList) String() string { return proto.CompactTextString(m) }
-func (*DocumentationList) ProtoMessage()    {}
+func (m *DocumentationList) Reset()                    { *m = DocumentationList{} }
+func (m *DocumentationList) String() string            { return proto.CompactTextString(m) }
+func (*DocumentationList) ProtoMessage()               {}
+func (*DocumentationList) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{1} }
 
 func (m *DocumentationList) GetDocumentations() []*Documentation {
 	if m != nil {
@@ -178,9 +189,10 @@ type Error struct {
 	XXX_unrecognized []byte  `json:"-"`
 }
 
-func (m *Error) Reset()         { *m = Error{} }
-func (m *Error) String() string { return proto.CompactTextString(m) }
-func (*Error) ProtoMessage()    {}
+func (m *Error) Reset()                    { *m = Error{} }
+func (m *Error) String() string            { return proto.CompactTextString(m) }
+func (*Error) ProtoMessage()               {}
+func (*Error) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{2} }
 
 func (m *Error) GetMessage() string {
 	if m != nil && m.Message != nil {
@@ -195,9 +207,10 @@ type IpAddress struct {
 	XXX_unrecognized []byte             `json:"-"`
 }
 
-func (m *IpAddress) Reset()         { *m = IpAddress{} }
-func (m *IpAddress) String() string { return proto.CompactTextString(m) }
-func (*IpAddress) ProtoMessage()    {}
+func (m *IpAddress) Reset()                    { *m = IpAddress{} }
+func (m *IpAddress) String() string            { return proto.CompactTextString(m) }
+func (*IpAddress) ProtoMessage()               {}
+func (*IpAddress) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{3} }
 
 func (m *IpAddress) GetAddress() string {
 	if m != nil && m.Address != nil {
@@ -219,12 +232,14 @@ type Request struct {
 	Context          []byte   `protobuf:"bytes,3,opt,name=context" json:"context,omitempty"`
 	Payload          []byte   `protobuf:"bytes,4,opt,name=payload" json:"payload,omitempty"`
 	Completed        *bool    `protobuf:"varint,5,opt,name=completed" json:"completed,omitempty"`
+	Trace            *Trace   `protobuf:"bytes,6,opt,name=trace" json:"trace,omitempty"`
 	XXX_unrecognized []byte   `json:"-"`
 }
 
-func (m *Request) Reset()         { *m = Request{} }
-func (m *Request) String() string { return proto.CompactTextString(m) }
-func (*Request) ProtoMessage()    {}
+func (m *Request) Reset()                    { *m = Request{} }
+func (m *Request) String() string            { return proto.CompactTextString(m) }
+func (*Request) ProtoMessage()               {}
+func (*Request) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{4} }
 
 func (m *Request) GetUuid() string {
 	if m != nil && m.Uuid != nil {
@@ -261,15 +276,23 @@ func (m *Request) GetCompleted() bool {
 	return false
 }
 
+func (m *Request) GetTrace() *Trace {
+	if m != nil {
+		return m.Trace
+	}
+	return nil
+}
+
 type Route struct {
 	Uri              *string    `protobuf:"bytes,1,opt,name=uri" json:"uri,omitempty"`
 	IpAddress        *IpAddress `protobuf:"bytes,2,opt,name=ip_address" json:"ip_address,omitempty"`
 	XXX_unrecognized []byte     `json:"-"`
 }
 
-func (m *Route) Reset()         { *m = Route{} }
-func (m *Route) String() string { return proto.CompactTextString(m) }
-func (*Route) ProtoMessage()    {}
+func (m *Route) Reset()                    { *m = Route{} }
+func (m *Route) String() string            { return proto.CompactTextString(m) }
+func (*Route) ProtoMessage()               {}
+func (*Route) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{5} }
 
 func (m *Route) GetUri() string {
 	if m != nil && m.Uri != nil {
@@ -291,9 +314,10 @@ type Routing struct {
 	XXX_unrecognized []byte   `json:"-"`
 }
 
-func (m *Routing) Reset()         { *m = Routing{} }
-func (m *Routing) String() string { return proto.CompactTextString(m) }
-func (*Routing) ProtoMessage()    {}
+func (m *Routing) Reset()                    { *m = Routing{} }
+func (m *Routing) String() string            { return proto.CompactTextString(m) }
+func (*Routing) ProtoMessage()               {}
+func (*Routing) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{6} }
 
 func (m *Routing) GetRouteTo() []*Route {
 	if m != nil {
@@ -317,9 +341,10 @@ type RouterConfig struct {
 	XXX_unrecognized []byte                     `json:"-"`
 }
 
-func (m *RouterConfig) Reset()         { *m = RouterConfig{} }
-func (m *RouterConfig) String() string { return proto.CompactTextString(m) }
-func (*RouterConfig) ProtoMessage()    {}
+func (m *RouterConfig) Reset()                    { *m = RouterConfig{} }
+func (m *RouterConfig) String() string            { return proto.CompactTextString(m) }
+func (*RouterConfig) ProtoMessage()               {}
+func (*RouterConfig) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{7} }
 
 func (m *RouterConfig) GetProtocolType() RouterConfig_ProtocolType {
 	if m != nil && m.ProtocolType != nil {
@@ -354,9 +379,10 @@ type RouterConfigList struct {
 	XXX_unrecognized []byte          `json:"-"`
 }
 
-func (m *RouterConfigList) Reset()         { *m = RouterConfigList{} }
-func (m *RouterConfigList) String() string { return proto.CompactTextString(m) }
-func (*RouterConfigList) ProtoMessage()    {}
+func (m *RouterConfigList) Reset()                    { *m = RouterConfigList{} }
+func (m *RouterConfigList) String() string            { return proto.CompactTextString(m) }
+func (*RouterConfigList) ProtoMessage()               {}
+func (*RouterConfigList) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{8} }
 
 func (m *RouterConfigList) GetRouterConfigs() []*RouterConfig {
 	if m != nil {
@@ -374,9 +400,10 @@ type ServiceRoute struct {
 	XXX_unrecognized []byte   `json:"-"`
 }
 
-func (m *ServiceRoute) Reset()         { *m = ServiceRoute{} }
-func (m *ServiceRoute) String() string { return proto.CompactTextString(m) }
-func (*ServiceRoute) ProtoMessage()    {}
+func (m *ServiceRoute) Reset()                    { *m = ServiceRoute{} }
+func (m *ServiceRoute) String() string            { return proto.CompactTextString(m) }
+func (*ServiceRoute) ProtoMessage()               {}
+func (*ServiceRoute) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{9} }
 
 func (m *ServiceRoute) GetDescription() string {
 	if m != nil && m.Description != nil {
@@ -413,8 +440,139 @@ func (m *ServiceRoute) GetVersion() string {
 	return ""
 }
 
+type Trace struct {
+	Uuid             *string `protobuf:"bytes,1,opt,name=uuid" json:"uuid,omitempty"`
+	Name             *string `protobuf:"bytes,2,opt,name=name" json:"name,omitempty"`
+	SpanUuid         *string `protobuf:"bytes,3,opt,name=span_uuid" json:"span_uuid,omitempty"`
+	ParentSpanUuid   *string `protobuf:"bytes,4,opt,name=parent_span_uuid" json:"parent_span_uuid,omitempty"`
+	StartTime        *string `protobuf:"bytes,5,opt,name=start_time" json:"start_time,omitempty"`
+	EndTime          *string `protobuf:"bytes,6,opt,name=end_time" json:"end_time,omitempty"`
+	XXX_unrecognized []byte  `json:"-"`
+}
+
+func (m *Trace) Reset()                    { *m = Trace{} }
+func (m *Trace) String() string            { return proto.CompactTextString(m) }
+func (*Trace) ProtoMessage()               {}
+func (*Trace) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{10} }
+
+func (m *Trace) GetUuid() string {
+	if m != nil && m.Uuid != nil {
+		return *m.Uuid
+	}
+	return ""
+}
+
+func (m *Trace) GetName() string {
+	if m != nil && m.Name != nil {
+		return *m.Name
+	}
+	return ""
+}
+
+func (m *Trace) GetSpanUuid() string {
+	if m != nil && m.SpanUuid != nil {
+		return *m.SpanUuid
+	}
+	return ""
+}
+
+func (m *Trace) GetParentSpanUuid() string {
+	if m != nil && m.ParentSpanUuid != nil {
+		return *m.ParentSpanUuid
+	}
+	return ""
+}
+
+func (m *Trace) GetStartTime() string {
+	if m != nil && m.StartTime != nil {
+		return *m.StartTime
+	}
+	return ""
+}
+
+func (m *Trace) GetEndTime() string {
+	if m != nil && m.EndTime != nil {
+		return *m.EndTime
+	}
+	return ""
+}
+
+type TraceList struct {
+	Traces           []*Trace `protobuf:"bytes,1,rep,name=traces" json:"traces,omitempty"`
+	XXX_unrecognized []byte   `json:"-"`
+}
+
+func (m *TraceList) Reset()                    { *m = TraceList{} }
+func (m *TraceList) String() string            { return proto.CompactTextString(m) }
+func (*TraceList) ProtoMessage()               {}
+func (*TraceList) Descriptor() ([]byte, []int) { return fileDescriptor0, []int{11} }
+
+func (m *TraceList) GetTraces() []*Trace {
+	if m != nil {
+		return m.Traces
+	}
+	return nil
+}
+
 func init() {
+	proto.RegisterType((*Documentation)(nil), "platform.Documentation")
+	proto.RegisterType((*DocumentationList)(nil), "platform.DocumentationList")
+	proto.RegisterType((*Error)(nil), "platform.Error")
+	proto.RegisterType((*IpAddress)(nil), "platform.IpAddress")
+	proto.RegisterType((*Request)(nil), "platform.Request")
+	proto.RegisterType((*Route)(nil), "platform.Route")
+	proto.RegisterType((*Routing)(nil), "platform.Routing")
+	proto.RegisterType((*RouterConfig)(nil), "platform.RouterConfig")
+	proto.RegisterType((*RouterConfigList)(nil), "platform.RouterConfigList")
+	proto.RegisterType((*ServiceRoute)(nil), "platform.ServiceRoute")
+	proto.RegisterType((*Trace)(nil), "platform.Trace")
+	proto.RegisterType((*TraceList)(nil), "platform.TraceList")
 	proto.RegisterEnum("platform.IpAddress_Version", IpAddress_Version_name, IpAddress_Version_value)
 	proto.RegisterEnum("platform.RouterConfig_RouterType", RouterConfig_RouterType_name, RouterConfig_RouterType_value)
 	proto.RegisterEnum("platform.RouterConfig_ProtocolType", RouterConfig_ProtocolType_name, RouterConfig_ProtocolType_value)
+}
+
+var fileDescriptor0 = []byte{
+	// 654 bytes of a gzipped FileDescriptorProto
+	0x1f, 0x8b, 0x08, 0x00, 0x00, 0x09, 0x6e, 0x88, 0x02, 0xff, 0x74, 0x53, 0xcb, 0x6e, 0xd3, 0x40,
+	0x14, 0xc5, 0x79, 0xfb, 0x26, 0x4d, 0xdc, 0x29, 0x6d, 0x5d, 0x21, 0x41, 0x3b, 0x5d, 0xd0, 0x45,
+	0x15, 0xa4, 0x08, 0x75, 0x81, 0x84, 0x10, 0x4d, 0x23, 0x40, 0x54, 0x4a, 0x70, 0x4c, 0x11, 0x2b,
+	0xcb, 0xb2, 0xa7, 0xc5, 0x52, 0xe2, 0x19, 0x66, 0x26, 0x15, 0xfd, 0x0b, 0xf8, 0x17, 0x3e, 0x90,
+	0x79, 0xb8, 0x75, 0x92, 0x86, 0x95, 0x7d, 0x1f, 0x73, 0xee, 0xeb, 0x1c, 0xe8, 0xb2, 0x59, 0x2c,
+	0xaf, 0x29, 0x9f, 0xf7, 0x19, 0xa7, 0x92, 0xa2, 0xd6, 0xbd, 0x8d, 0x43, 0xd8, 0xba, 0xa0, 0xc9,
+	0x62, 0x4e, 0x72, 0x19, 0xcb, 0x8c, 0xe6, 0x68, 0x07, 0xda, 0x29, 0x11, 0x09, 0xcf, 0x98, 0x36,
+	0x7d, 0xe7, 0xd0, 0x39, 0x71, 0x51, 0x1f, 0xba, 0x82, 0xf0, 0xdb, 0x2c, 0x21, 0x11, 0xa7, 0x0b,
+	0x49, 0x84, 0x5f, 0x39, 0xac, 0x9e, 0xb4, 0x07, 0x7b, 0xfd, 0x07, 0xe0, 0xa9, 0x8d, 0x07, 0x3a,
+	0x8c, 0x2f, 0x60, 0x7b, 0x05, 0xf5, 0x32, 0x13, 0x12, 0xbd, 0x82, 0x6e, 0xba, 0xec, 0x14, 0x0a,
+	0x5c, 0x83, 0xec, 0x97, 0x20, 0x2b, 0x8f, 0xb0, 0x0f, 0xf5, 0x11, 0xe7, 0x94, 0xa3, 0x1e, 0x34,
+	0xe7, 0x44, 0x88, 0xf8, 0x86, 0xd8, 0x7e, 0x30, 0x01, 0xf7, 0x13, 0x7b, 0x9f, 0xa6, 0x5c, 0x79,
+	0x75, 0x34, 0xb6, 0xbf, 0x45, 0xb7, 0xa7, 0xd0, 0xbc, 0x25, 0x5c, 0xe8, 0xf6, 0x2b, 0xca, 0xd1,
+	0x1d, 0x3c, 0x2b, 0x2b, 0x3c, 0x3c, 0xeb, 0x5f, 0xd9, 0x14, 0x7c, 0x00, 0xcd, 0xe2, 0x17, 0x35,
+	0xa0, 0x72, 0xf5, 0xda, 0x7b, 0x62, 0xbe, 0x67, 0x9e, 0x83, 0x7f, 0x3b, 0xd0, 0x0c, 0xc8, 0xcf,
+	0x05, 0x51, 0xdd, 0x77, 0xa0, 0xb6, 0x58, 0x64, 0x69, 0x51, 0x02, 0x43, 0x53, 0x2f, 0x22, 0xcb,
+	0x6f, 0x4c, 0x89, 0xf6, 0x60, 0xbb, 0x2c, 0x11, 0xd8, 0x80, 0xee, 0x2b, 0xa1, 0xb9, 0x24, 0xbf,
+	0xa4, 0x5f, 0x55, 0x39, 0x1d, 0xed, 0x60, 0xf1, 0xdd, 0x8c, 0xc6, 0xa9, 0x5f, 0x33, 0x8e, 0x6d,
+	0x70, 0x13, 0x3a, 0x67, 0x33, 0x22, 0x49, 0xea, 0xd7, 0x95, 0xab, 0x85, 0x9e, 0x43, 0x5d, 0xf2,
+	0x38, 0x21, 0x7e, 0xc3, 0xc0, 0xf6, 0x4a, 0xd8, 0x50, 0xbb, 0xf1, 0x5b, 0xa8, 0x9b, 0x15, 0xa3,
+	0x36, 0x54, 0x17, 0x3c, 0x2b, 0xda, 0x79, 0x09, 0x90, 0xb1, 0xe8, 0x7e, 0x0b, 0xb6, 0xa3, 0x9d,
+	0x0d, 0x43, 0xe3, 0x2f, 0x6a, 0xa0, 0xa2, 0xbd, 0x23, 0x68, 0x99, 0x5b, 0x46, 0x92, 0x16, 0x87,
+	0xe8, 0xad, 0xce, 0x40, 0xd0, 0x31, 0x80, 0x4d, 0xb9, 0xe6, 0x74, 0x5e, 0x9c, 0x7c, 0x3d, 0x09,
+	0xff, 0xad, 0x40, 0xc7, 0xfc, 0xf1, 0x21, 0xcd, 0xaf, 0xb3, 0x1b, 0xf4, 0x06, 0xb6, 0x0c, 0xcb,
+	0x12, 0x3a, 0x8b, 0xe4, 0x1d, 0xb3, 0x37, 0xeb, 0x0e, 0x8e, 0xd7, 0x1e, 0x16, 0xe9, 0xfd, 0x49,
+	0x91, 0x1b, 0xaa, 0x54, 0xbd, 0xe5, 0x1f, 0x54, 0x48, 0x33, 0x82, 0xab, 0x2d, 0x46, 0xb9, 0x5d,
+	0x9f, 0x8b, 0xce, 0xa0, 0x6d, 0xba, 0xe1, 0x16, 0xb5, 0x66, 0x50, 0x8f, 0xfe, 0x83, 0x6a, 0x0d,
+	0x8d, 0x89, 0xa7, 0x00, 0xa5, 0x85, 0x0e, 0x60, 0x37, 0x18, 0x7f, 0x0d, 0x47, 0x41, 0x14, 0x7e,
+	0x9f, 0x8c, 0xa2, 0x6f, 0xa3, 0xf3, 0xe9, 0x78, 0xf8, 0x79, 0x14, 0x7a, 0x0e, 0x7a, 0x0a, 0xde,
+	0x72, 0xe8, 0x43, 0x30, 0x19, 0x7a, 0x95, 0x75, 0xef, 0xc7, 0x30, 0x9c, 0x78, 0x55, 0xfc, 0x0e,
+	0x3a, 0x2b, 0x8d, 0xef, 0x01, 0x9a, 0x04, 0xe3, 0x70, 0x3c, 0x1c, 0x5f, 0x2e, 0xe5, 0x39, 0x68,
+	0x1f, 0x76, 0x1e, 0xfb, 0xa7, 0x5e, 0x05, 0x9f, 0x2b, 0xd8, 0xa5, 0x86, 0x8d, 0x42, 0x94, 0xcc,
+	0x8a, 0x09, 0x13, 0xe3, 0xbc, 0x57, 0xc8, 0xde, 0xe6, 0x21, 0xf1, 0x1f, 0x07, 0x3a, 0xcb, 0xba,
+	0xdb, 0x2c, 0xde, 0x43, 0xc5, 0x55, 0x4b, 0xe2, 0x82, 0x19, 0x8f, 0xee, 0x8c, 0xc1, 0x55, 0xec,
+	0x60, 0x4a, 0x92, 0x4a, 0xd9, 0xd5, 0xcd, 0x5c, 0xd8, 0x85, 0xad, 0x4c, 0x44, 0x29, 0x61, 0x9c,
+	0x24, 0xb1, 0xe6, 0x6b, 0xcd, 0xf0, 0xb5, 0x57, 0x6a, 0xad, 0x6e, 0xa4, 0x79, 0x0b, 0x75, 0xc3,
+	0xd4, 0x35, 0xc1, 0x28, 0x2b, 0x8f, 0xe7, 0xa4, 0x38, 0xac, 0x22, 0xbe, 0x60, 0x71, 0x1e, 0x99,
+	0x04, 0x7b, 0x5d, 0x1f, 0x3c, 0x16, 0x73, 0xa5, 0xfd, 0xa8, 0x8c, 0xd4, 0x4c, 0x04, 0x01, 0x08,
+	0x19, 0x73, 0x19, 0xc9, 0x4c, 0x01, 0x98, 0x2a, 0xc8, 0x83, 0x16, 0xc9, 0x53, 0xeb, 0x69, 0x98,
+	0xba, 0xa7, 0xe0, 0x9a, 0xba, 0x66, 0x91, 0x2f, 0xa0, 0x61, 0x54, 0x24, 0x1e, 0x33, 0xdb, 0x24,
+	0xfd, 0x0b, 0x00, 0x00, 0xff, 0xff, 0x05, 0x9c, 0x53, 0x81, 0x11, 0x05, 0x00, 0x00,
 }

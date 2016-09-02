@@ -1,8 +1,9 @@
 package amqp
 
 import (
-	"github.com/microplatform-io/platform"
 	"sync"
+
+	"github.com/microplatform-io/platform"
 )
 
 const MAX_WORKERS = 50
@@ -58,8 +59,6 @@ func newSubscription(topic string, handler platform.ConsumerHandler) *subscripti
 		deliveries:   make(chan DeliveryInterface),
 		totalWorkers: 0,
 	}
-
-	logger.Debugf("[newSubscription] creating '%s' subscription worker pool", topic)
 
 	// TODO: Determine an ideal worker pool
 	for i := 0; i < MAX_WORKERS; i++ {

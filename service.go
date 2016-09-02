@@ -54,6 +54,7 @@ func identifyPanic() string {
 type Service struct {
 	publisher  Publisher
 	subscriber Subscriber
+	tracer     Tracer
 	responder  Responder
 	name       string
 
@@ -76,16 +77,23 @@ func (s *Service) AddHandler(path string, handler Handler) {
 		s.incrementWorkerPendingJobs()
 		defer s.decrementWorkerPendingJobs()
 
-		logger.Infof("[Service.Subscriber] handling %s request", path)
-
 		request := &Request{}
 		if err := Unmarshal(body, request); err != nil {
-			logger.Errorln("[Service.Subscriber] failed to decode request")
-
 			return nil
 		}
 
-		requestResponder := NewRequestResponder(s.responder, request)
+		var responder Responder
+
+		if s.tracer != nil {
+			if request.Trace == nil {
+				request.Trace = s.tracer.Start(request.Trace, path)
+			}
+
+			traceResponder := NewTraceResponder(s.responder, s.tracer)
+			responder = NewRequestResponder(traceResponder, request)
+		} else {
+			responder = NewRequestResponder(s.responder, request)
+		}
 
 		if PREVENT_PLATFORM_PANICS {
 			defer func() {
@@ -94,7 +102,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 						Message: String(fmt.Sprintf("A fatal error has occurred. %s: %s %s", path, identifyPanic(), r)),
 					})
 
-					requestResponder.Respond(&Request{
+					responder.Respond(&Request{
 						Routing:   RouteToUri("resource:///platform/reply/error"),
 						Payload:   panicErrorBytes,
 						Completed: Bool(true),
@@ -105,7 +113,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 			}()
 		}
 
-		handler.Handle(requestResponder, request)
+		handler.Handle(responder, request)
 
 		return nil
 	}))
@@ -199,8 +207,9 @@ func (s *Service) Run() {
 	<-s.allWorkersDone
 }
 
-func NewService(serviceName string, publisher Publisher, subscriber Subscriber) (*Service, error) {
+func NewService(serviceName string, publisher Publisher, subscriber Subscriber, tracer Tracer) (*Service, error) {
 	return &Service{
+		tracer:         tracer,
 		subscriber:     subscriber,
 		publisher:      publisher,
 		responder:      NewPublishResponder(publisher),
@@ -210,8 +219,9 @@ func NewService(serviceName string, publisher Publisher, subscriber Subscriber) 
 	}, nil
 }
 
-func NewServiceWithResponder(serviceName string, publisher Publisher, subscriber Subscriber, responder Responder) (*Service, error) {
+func NewServiceWithResponder(serviceName string, publisher Publisher, subscriber Subscriber, tracer Tracer, responder Responder) (*Service, error) {
 	return &Service{
+		tracer:         tracer,
 		subscriber:     subscriber,
 		publisher:      publisher,
 		responder:      responder,

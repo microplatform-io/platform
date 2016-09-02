@@ -21,6 +21,65 @@ type Router interface {
 	SetHeartbeatTimeout(heartbeatTimeout time.Duration)
 }
 
+type TracingRouter struct {
+	parentRouter Router
+	tracer       Tracer
+	parentTrace  *Trace
+}
+
+func (r *TracingRouter) Route(request *Request) (*Request, error) {
+	trace := r.tracer.Start(r.parentTrace, request.GetRouting().GetRouteTo()[0].GetUri())
+	defer r.tracer.End(trace)
+
+	request.Trace = trace
+
+	return r.parentRouter.Route(request)
+}
+
+func (r *TracingRouter) Stream(request *Request) (chan *Request, chan interface{}) {
+	trace := r.tracer.Start(r.parentTrace, request.GetRouting().GetRouteTo()[0].GetUri())
+
+	request.Trace = trace
+
+	internalResponses, internalTimeout := r.parentRouter.Stream(request)
+
+	returnedResponses := make(chan *Request)
+	returnedTimeout := make(chan interface{})
+
+	go func() {
+		defer r.tracer.End(trace)
+
+		for {
+			select {
+			case response := <-internalResponses:
+				returnedResponses <- response
+
+				if response.GetCompleted() {
+					return
+				}
+			case <-internalTimeout:
+				close(returnedTimeout)
+
+				return
+			}
+		}
+	}()
+
+	return returnedResponses, returnedTimeout
+}
+
+func (r *TracingRouter) SetHeartbeatTimeout(heartbeatTimeout time.Duration) {
+	r.parentRouter.SetHeartbeatTimeout(heartbeatTimeout)
+}
+
+func NewTracingRouter(parentRouter Router, tracer Tracer, parentTrace *Trace) *TracingRouter {
+	return &TracingRouter{
+		parentRouter: parentRouter,
+		tracer:       tracer,
+		parentTrace:  parentTrace,
+	}
+}
+
 type StandardRouter struct {
 	publisher        Publisher
 	subscriber       Subscriber
@@ -64,7 +123,6 @@ func (r *StandardRouter) Route(originalRequest *Request) (*Request, error) {
 }
 
 func (r *StandardRouter) Stream(originalRequest *Request) (chan *Request, chan interface{}) {
-	logger.Warn("Stream!")
 	request := proto.Clone(originalRequest).(*Request)
 
 	if request.Uuid == nil {
@@ -83,8 +141,6 @@ func (r *StandardRouter) Stream(originalRequest *Request) (chan *Request, chan i
 
 	parsedURI, err := url.Parse(requestURI)
 	if err != nil {
-		logger.Errorf("[StandardRouter.Stream] %s - %s - Failed to parse the request uri: %s", requestUUID, requestURI, err)
-
 		return createResponseChanWithError(request, &Error{
 			Message: String(fmt.Sprintf("Failed to parse the RouteTo URI: %s", err)),
 		}), nil
@@ -96,12 +152,11 @@ func (r *StandardRouter) Stream(originalRequest *Request) (chan *Request, chan i
 		})
 	}
 
-	logger.Infof("[StandardRouter.Stream]          routing %s request", requestURI)
-	logger.Printf("[StandardRouter.Stream] %s - %s - routing request: %s", requestUUID, requestURI, request)
-
-	payload, err := Marshal(request)
+	requestBytes, err := Marshal(request)
 	if err != nil {
-		logger.Errorf("[StandardRouter.Stream] %s - %s - failed to marshal request payload: %s", requestUUID, requestURI, err)
+		return createResponseChanWithError(request, &Error{
+			Message: String(fmt.Sprintf("Failed to marshal the request: %s", err)),
+		}), nil
 	}
 
 	internalResponses := make(chan *Request, 5)
@@ -112,15 +167,12 @@ func (r *StandardRouter) Stream(originalRequest *Request) (chan *Request, chan i
 	r.pendingResponses[requestUUID] = internalResponses
 	r.mu.Unlock()
 
-	logger.Debug("Placing message onto pending responses")
+	timer := time.NewTimer(r.heartbeatTimeout * 2)
 
 	go func() {
-		timer := time.NewTimer(r.heartbeatTimeout)
 		defer timer.Stop()
 
 		for {
-			timer.Reset(r.heartbeatTimeout)
-
 			select {
 			case response := <-internalResponses:
 				responseUri := ""
@@ -128,11 +180,8 @@ func (r *StandardRouter) Stream(originalRequest *Request) (chan *Request, chan i
 					responseUri = response.GetRouting().GetRouteTo()[0].GetUri()
 				}
 
-				logger.Printf("[StandardRouter.Stream] %s - %s - %s - received an internal response", requestUUID, requestURI, responseUri)
-
 				// Internal requests shouldn't have to deal with heartbeats from other services
 				if IsInternalRequest(request) && responseUri == "resource:///heartbeat" {
-					logger.Printf("[StandardRouter.Stream] %s - %s - %s - this was an internal request so we will bypass sending the heartbeat", requestUUID, requestURI, responseUri)
 					continue
 				}
 
@@ -141,14 +190,11 @@ func (r *StandardRouter) Stream(originalRequest *Request) (chan *Request, chan i
 
 				select {
 				case responses <- response:
-					logger.Printf("[StandardRouter.Stream] %s - %s - %s - successfully notified client of the response", requestUUID, requestURI, responseUri)
 				case <-time.After(5 * time.Second):
 					logger.Errorf("[StandardRouter.Stream] %s - %s - %s - failed to notify client of the response", requestUUID, requestURI, responseUri)
 				}
 
 				if response.GetCompleted() {
-					logger.Infof("[StandardRouter.Stream]          received response")
-					logger.Printf("[StandardRouter.Stream] %s - %s - %s - this was the final response, shutting down the goroutine", requestUUID, requestURI, responseUri)
 					return
 				}
 
@@ -161,16 +207,18 @@ func (r *StandardRouter) Stream(originalRequest *Request) (chan *Request, chan i
 
 				return
 			}
+
+			timer.Reset(r.heartbeatTimeout)
 		}
 	}()
 
-	if err := r.publisher.Publish(parsedURI.Scheme+"-"+parsedURI.Path, payload); err != nil {
-		logger.Errorf("[StandardRouter.Stream] %s - %s - failed to publish request to microservices: %s", requestUUID, requestURI, err)
-
+	if err := r.publisher.Publish(parsedURI.Scheme+"-"+parsedURI.Path, requestBytes); err != nil {
 		return createResponseChanWithError(request, &Error{
 			Message: String(fmt.Sprintf("Failed to publish request to microservices: %s", err)),
 		}), nil
 	}
+
+	timer.Reset(r.heartbeatTimeout)
 
 	return responses, streamTimeout
 }
@@ -180,15 +228,9 @@ func (r *StandardRouter) SetHeartbeatTimeout(heartbeatTimeout time.Duration) {
 }
 
 func (r *StandardRouter) subscribe() {
-	logger.Printf("[NewStandardRouter] creating a new standard router.")
-
 	r.subscriber.Subscribe(r.topic, ConsumerHandlerFunc(func(body []byte) error {
-		logger.Println("[StandardRouter.Subscriber] receiving message for router")
-
 		response := &Request{}
 		if err := Unmarshal(body, response); err != nil {
-			logger.Printf("[StandardRouter.Subscriber] failed to unmarshal response for router: %s", err)
-
 			return err
 		}
 
@@ -198,21 +240,15 @@ func (r *StandardRouter) subscribe() {
 			responseUri = response.GetRouting().GetRouteTo()[0].GetUri()
 		}
 
-		logger.Printf("[StandardRouter.Subscriber] %s - %s - received response for router", responseUuid, responseUri)
-
 		r.mu.Lock()
 		if responses, exists := r.pendingResponses[response.GetUuid()]; exists {
 			select {
 			case responses <- response:
-				logger.Printf("[StandardRouter.Subscriber] %s - %s - reply chan was available", responseUuid, responseUri)
-
 			default:
 				logger.Printf("[StandardRouter.Subscriber] %s - %s - reply chan was not available", responseUuid, responseUri)
 			}
 
 			if response.GetCompleted() {
-				logger.Printf("[StandardRouter.Subscriber] %s - %s - this was the last response, closing and deleting the responses chan", responseUuid, responseUri)
-
 				delete(r.pendingResponses, response.GetUuid())
 			}
 		} else {
@@ -220,21 +256,17 @@ func (r *StandardRouter) subscribe() {
 		}
 		r.mu.Unlock()
 
-		logger.Printf("[StandardRouter.Subscriber] %s - %s - completed routing response", responseUuid, responseUri)
-
 		return nil
 	}))
 
 	r.subscriber.Run()
-
-	logger.Printf("[NewStandardRouter] router has been created: %#v", r)
 }
 
 func NewStandardRouter(publisher Publisher, subscriber Subscriber) *StandardRouter {
 	router := &StandardRouter{
 		publisher:        publisher,
 		subscriber:       subscriber,
-		heartbeatTimeout: time.Second * 2,
+		heartbeatTimeout: time.Second * 10,
 		topic:            "router-" + CreateUUID(),
 		pendingResponses: map[string]chan *Request{},
 	}
@@ -248,7 +280,7 @@ func NewStandardRouterWithTopic(publisher Publisher, subscriber Subscriber, topi
 	router := &StandardRouter{
 		publisher:        publisher,
 		subscriber:       subscriber,
-		heartbeatTimeout: time.Second * 2,
+		heartbeatTimeout: time.Second * 10,
 		topic:            topic,
 		pendingResponses: map[string]chan *Request{},
 	}

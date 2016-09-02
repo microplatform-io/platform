@@ -3,44 +3,59 @@ package platform
 import (
 	"sync"
 	"time"
+
+	"github.com/pkg/errors"
 )
 
 type Responder interface {
-	Respond(response *Request)
+	Respond(response *Request) error
 }
 
 type PublishResponder struct {
 	publisher Publisher
 }
 
-func (rs *PublishResponder) Respond(response *Request) {
-	if response.GetCompleted() {
-		logger.Printf("[PublishResponder.Respond] %s sending FINAL %s", response.GetUuid(), response.Routing.RouteTo[0].GetUri())
-	} else {
-		logger.Printf("[PublishResponder.Respond] %s sending INTERMEDIARY %s", response.GetUuid(), response.Routing.RouteTo[0].GetUri())
-	}
-
+func (rs *PublishResponder) Respond(response *Request) error {
 	destinationRouteIndex := len(response.Routing.RouteTo) - 1
 	destinationRoute := response.Routing.RouteTo[destinationRouteIndex]
 	response.Routing.RouteTo = response.Routing.RouteTo[:destinationRouteIndex]
 
-	body, err := Marshal(response)
+	responseBytes, err := Marshal(response)
 	if err != nil {
-		logger.Errorf("[PublishResponder.Respond] failed to marshal response: %s", err)
-		return
+		return errors.Wrap(err, "publish responder failed to marshal response")
 	}
 
 	// URI may not be valid here, we may need to parse it first for good practice. - Bryan
-	if err := rs.publisher.Publish(destinationRoute.GetUri(), body); err != nil {
-		logger.WithError(err).Warn("Failed to publish a response")
+	if err := rs.publisher.Publish(destinationRoute.GetUri(), responseBytes); err != nil {
+		return errors.Wrap(err, "publish responder failed to publish the response")
 	}
 
-	logger.Infoln("[PublishResponder.Respond] published response successfully")
+	return nil
 }
 
 func NewPublishResponder(publisher Publisher) *PublishResponder {
 	return &PublishResponder{
 		publisher: publisher,
+	}
+}
+
+type TraceResponder struct {
+	parent Responder
+	tracer Tracer
+}
+
+func (r *TraceResponder) Respond(response *Request) error {
+	if response.GetCompleted() {
+		r.tracer.End(response.Trace)
+	}
+
+	return r.parent.Respond(response)
+}
+
+func NewTraceResponder(parent Responder, tracer Tracer) *TraceResponder {
+	return &TraceResponder{
+		parent: parent,
+		tracer: tracer,
 	}
 }
 
@@ -52,32 +67,26 @@ type RequestResponder struct {
 	mu        sync.Mutex
 }
 
-func (rs *RequestResponder) Respond(response *Request) {
+func (rs *RequestResponder) Respond(response *Request) error {
 	rs.mu.Lock()
 	defer rs.mu.Unlock()
 
 	if rs.completed {
-		logger.Printf("[RequestResponder.Respond] %s did not send response due to already been completed", response.GetUuid())
-		return
+		return errors.New("request responder has already been completed")
 	}
 
 	response = generateResponse(rs.request, response)
 
-	logger.Printf("[RequestResponder.Respond] %s attempting to send response", response.GetUuid())
 	if response.GetCompleted() {
 		rs.completed = true
 		close(rs.quit)
 	}
 
-	rs.parent.Respond(response)
-
-	logger.Printf("[RequestResponder.Respond] %s sent response", response.GetUuid())
+	return rs.parent.Respond(response)
 }
 
 func NewRequestResponder(parent Responder, request *Request) *RequestResponder {
 	quit := make(chan bool, 1)
-
-	logger.Println("[NewRequestResponder] creating a new heartbeat courier")
 
 	go func() {
 		for {

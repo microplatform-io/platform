@@ -4,6 +4,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/cenk/backoff"
+	"github.com/pkg/errors"
 	"github.com/streadway/amqp"
 )
 
@@ -50,38 +52,55 @@ func (d *CachingDialer) Dial() (ConnectionInterface, error) {
 	d.mu.Lock()
 	defer d.mu.Unlock()
 
-	if d.connection != nil {
-		return d.connection, nil
+	if d.connection == nil {
+		return nil, errors.New("connection is not available")
 	}
 
-	connection, err := d.dialer.Dial()
-	if err != nil {
-		return nil, err
-	}
-
-	d.connection = connection
-
-	go d.keepAlive()
-
-	return connection, nil
+	return d.connection, nil
 }
 
 func (d *CachingDialer) keepAlive() {
-	d.mu.Lock()
-	closed := d.connection.NotifyClose(make(chan *amqp.Error))
-	d.mu.Unlock()
+	for {
+		d.mu.Lock()
+		closed := d.connection.NotifyClose(make(chan *amqp.Error))
+		d.mu.Unlock()
 
-	<-closed
+		<-closed
 
-	d.mu.Lock()
-	d.connection = nil
-	d.mu.Unlock()
+		d.mu.Lock()
+		err := backoff.Retry(func() error {
+			connection, err := d.dialer.Dial()
+			if err != nil {
+				return err
+			}
+
+			d.connection = connection
+
+			return nil
+		}, backoff.NewExponentialBackOff())
+		if err != nil {
+			panic(err)
+		}
+		d.mu.Unlock()
+	}
 }
 
 func NewCachingDialer(url string) *CachingDialer {
-	return &CachingDialer{
-		dialer: NewDialer(url),
+	dialer := NewDialer(url)
+
+	connection, err := dialer.Dial()
+	if err != nil {
+		panic(err)
 	}
+
+	cachingDialer := &CachingDialer{
+		dialer:     dialer,
+		connection: connection,
+	}
+
+	go cachingDialer.keepAlive()
+
+	return cachingDialer
 }
 
 func NewCachingDialers(urls []string) []*CachingDialer {
