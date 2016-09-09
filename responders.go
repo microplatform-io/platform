@@ -1,6 +1,7 @@
 package platform
 
 import (
+	"github.com/Sirupsen/logrus"
 	"sync"
 	"time"
 
@@ -19,6 +20,12 @@ func (rs *PublishResponder) Respond(response *Request) error {
 	destinationRouteIndex := len(response.Routing.RouteTo) - 1
 	destinationRoute := response.Routing.RouteTo[destinationRouteIndex]
 	response.Routing.RouteTo = response.Routing.RouteTo[:destinationRouteIndex]
+
+	logger.WithFields(logrus.Fields{
+		"request_uuid": response.GetUuid(),
+		"trace_uuid":   response.GetTrace().GetUuid(),
+		"route_to":     response.GetRouting().GetRouteTo()[0].GetUri(),
+	}).Debug("publishing response")
 
 	responseBytes, err := Marshal(response)
 	if err != nil {
@@ -89,12 +96,24 @@ func NewRequestResponder(parent Responder, request *Request) *RequestResponder {
 	quit := make(chan bool, 1)
 
 	go func() {
+		heartbeatTicker := time.NewTicker(500 * time.Millisecond)
+		defer heartbeatTicker.Stop()
+
+		warningTicker := time.NewTicker(60 * time.Second)
+		defer warningTicker.Stop()
+
 		for {
 			select {
-			case <-time.After(500 * time.Millisecond):
+			case <-heartbeatTicker.C:
 				parent.Respond(generateResponse(request, &Request{
 					Routing: RouteToUri("resource:///heartbeat"),
 				}))
+
+			case <-warningTicker.C:
+				logger.WithFields(logrus.Fields{
+					"request_uuid": request.GetUuid(),
+					"trace_uuid":   request.GetTrace().GetUuid(),
+				}).Warn("this request has been alive for at least 60 seconds")
 
 			case <-quit:
 				return

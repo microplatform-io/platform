@@ -27,26 +27,15 @@ var (
 	PREVENT_PLATFORM_PANICS = Getenv("PLATFORM_PREVENT_PANICS", "1") == "1"
 )
 
-func init() {
-	switch strings.ToLower(os.Getenv("LOG_LEVEL")) {
-	case "debug":
-		logrus.SetLevel(logrus.DebugLevel)
-	case "info":
-		logrus.SetLevel(logrus.InfoLevel)
-	case "warn":
-		logrus.SetLevel(logrus.WarnLevel)
-	case "error":
-		logrus.SetLevel(logrus.ErrorLevel)
-	case "fatal":
-		logrus.SetLevel(logrus.FatalLevel)
-	case "panic":
-		logrus.SetLevel(logrus.PanicLevel)
-	default:
-		logrus.SetLevel(logrus.DebugLevel)
-	}
+var LOG_LEVEL = strings.ToLower(os.Getenv("LOG_LEVEL"))
 
-	logrus.SetOutput(os.Stdout)
-	logrus.SetFormatter(&DefaultFormatter{})
+var logLevels = map[string]logrus.Level{
+	"debug": logrus.DebugLevel,
+	"info":  logrus.InfoLevel,
+	"warn":  logrus.WarnLevel,
+	"error": logrus.ErrorLevel,
+	"fatal": logrus.FatalLevel,
+	"panic": logrus.PanicLevel,
 }
 
 func CreateUUID() string {
@@ -148,6 +137,12 @@ func GetLogger(prefix string) *logrus.Logger {
 	}
 	logger.Level = logrus.GetLevel()
 	logger.Out = os.Stdout
+
+	if logLevel, exists := logLevels[LOG_LEVEL]; exists {
+		logger.Level = logLevel
+	} else {
+		logger.Level = logrus.DebugLevel
+	}
 
 	return logger
 }

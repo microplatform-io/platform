@@ -84,7 +84,7 @@ func (s *Subscriber) queueDeclare(channelInterface ChannelInterface) error {
 func (s *Subscriber) run() error {
 	entry := logger.WithField("method", "Subscriber.run")
 
-	entry.Debug("Getting a connection interface")
+	entry.Info("Getting a connection interface")
 
 	connectionInterface, err := s.dialerInterface.Dial()
 	if err != nil {
@@ -94,7 +94,7 @@ func (s *Subscriber) run() error {
 
 	connectionClosed := connectionInterface.NotifyClose(make(chan *amqp.Error))
 
-	entry.WithField("connection_interface", connectionInterface).Debug("Getting a channel interface")
+	entry.WithField("connection_interface", connectionInterface).Info("Getting a channel interface")
 
 	channelInterface, err := connectionInterface.GetChannelInterface()
 	if err != nil {
@@ -104,21 +104,21 @@ func (s *Subscriber) run() error {
 
 	channelInterfaceClosed := channelInterface.NotifyClose(make(chan *amqp.Error))
 
-	entry.Debug("Declaring the queue")
+	entry.Info("Declaring the queue")
 
 	if err := s.queueDeclare(channelInterface); err != nil {
 		entry.WithError(err).Error("Failed to declare the queue")
 		return err
 	}
 
-	entry.Debug("Binding the queue")
+	entry.Info("Binding the queue")
 
 	if err := s.queueBind(channelInterface); err != nil {
 		entry.WithError(err).Error("Failed to bind the queue")
 		return err
 	}
 
-	entry.Debug("Consuming messages from the channel interface")
+	entry.Info("Consuming messages from the channel interface")
 
 	msgs, err := channelInterface.Consume(
 		s.queue,     // queue
