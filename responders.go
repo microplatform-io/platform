@@ -21,10 +21,15 @@ func (rs *PublishResponder) Respond(response *Request) error {
 	destinationRoute := response.Routing.RouteTo[destinationRouteIndex]
 	response.Routing.RouteTo = response.Routing.RouteTo[:destinationRouteIndex]
 
+	routeTo := ""
+	if len(response.GetRouting().GetRouteTo()) > 0 {
+		routeTo = response.GetRouting().GetRouteTo()[0].GetUri()
+	}
+
 	logger.WithFields(logrus.Fields{
 		"request_uuid": response.GetUuid(),
 		"trace_uuid":   response.GetTrace().GetUuid(),
-		"route_to":     response.GetRouting().GetRouteTo()[0].GetUri(),
+		"route_to":     routeTo,
 	}).Debug("publishing response")
 
 	responseBytes, err := Marshal(response)
