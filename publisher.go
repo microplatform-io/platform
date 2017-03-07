@@ -4,6 +4,7 @@ import "errors"
 
 type Publisher interface {
 	Publish(topic string, body []byte) error
+	Close() error
 }
 
 type MultiPublisher struct {
@@ -20,6 +21,14 @@ func (p *MultiPublisher) Publish(topic string, body []byte) error {
 	defer p.incrementOffset()
 
 	return p.publishers[p.offset].Publish(topic, body)
+}
+
+func (p *MultiPublisher) Close() error {
+	for i := range p.publishers {
+		p.publishers[i].Close()
+	}
+
+	return nil
 }
 
 func (p *MultiPublisher) incrementOffset() {
