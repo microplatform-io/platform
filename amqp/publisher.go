@@ -90,9 +90,6 @@ func NewPublisher(dialerInterface DialerInterface) (*Publisher, error) {
 	}, nil
 }
 
-
-
-
 func NewMultiPublisher(dialerInterfaces []DialerInterface) (platform.Publisher, error) {
 	publishers := make([]platform.Publisher, len(dialerInterfaces))
 
