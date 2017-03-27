@@ -14,13 +14,23 @@ import (
 )
 
 type Handler interface {
-	Handle(responder Responder, request *Request)
+	ServePlatform(responder Responder, request *Request)
 }
 
 type HandlerFunc func(responder Responder, request *Request)
 
-func (handlerFunc HandlerFunc) Handle(responder Responder, request *Request) {
+func (handlerFunc HandlerFunc) ServePlatform(responder Responder, request *Request) {
 	handlerFunc(responder, request)
+}
+
+func capturePanic(fn func(r interface{})) {
+	if !PREVENT_PLATFORM_PANICS {
+		return
+	}
+
+	if r := recover(); r != nil {
+		fn(r)
+	}
 }
 
 func identifyPanic() string {
@@ -52,17 +62,34 @@ func identifyPanic() string {
 }
 
 type Service struct {
+	name       string
 	publisher  Publisher
 	subscriber Subscriber
 	tracer     Tracer
 	responder  Responder
-	name       string
+
+	healthManager  HealthManager
+	healthCheckers []HealthChecker
 
 	mu                sync.Mutex
 	closed            bool
 	workerPendingJobs int32
 	workerQuitChan    chan interface{}
 	allWorkersDone    chan interface{}
+}
+
+func (s *Service) generateResponder(request *Request, path string) Responder {
+	responder := s.responder
+
+	if s.tracer != nil {
+		if request.Trace == nil {
+			request.Trace = s.tracer.Start(nil, path)
+		}
+
+		responder = NewTraceResponder(s.responder, s.tracer)
+	}
+
+	return NewRequestResponder(responder, request)
 }
 
 func (s *Service) AddHandler(path string, handler Handler) {
@@ -82,56 +109,42 @@ func (s *Service) AddHandler(path string, handler Handler) {
 			return nil
 		}
 
-		var responder Responder
+		responder := s.generateResponder(request, path)
 
-		if s.tracer != nil {
-			if request.Trace == nil {
-				request.Trace = s.tracer.Start(request.Trace, path)
-			}
+		defer capturePanic(func(r interface{}) {
+			panicErrorBytes, _ := Marshal(&Error{
+				Message: String(fmt.Sprintf("A fatal error has occurred. %s: %s %s", path, identifyPanic(), r)),
+			})
 
-			traceResponder := NewTraceResponder(s.responder, s.tracer)
-			responder = NewRequestResponder(traceResponder, request)
-		} else {
-			responder = NewRequestResponder(s.responder, request)
-		}
+			responder.Respond(&Request{
+				Routing:   RouteToUri("resource:///platform/reply/error"),
+				Payload:   panicErrorBytes,
+				Completed: Bool(true),
+			})
 
-		if PREVENT_PLATFORM_PANICS {
-			defer func() {
-				if r := recover(); r != nil {
-					panicErrorBytes, _ := Marshal(&Error{
-						Message: String(fmt.Sprintf("A fatal error has occurred. %s: %s %s", path, identifyPanic(), r)),
-					})
+			s.publisher.Publish("panic.handler."+path, body)
+		})
 
-					responder.Respond(&Request{
-						Routing:   RouteToUri("resource:///platform/reply/error"),
-						Payload:   panicErrorBytes,
-						Completed: Bool(true),
-					})
-
-					s.publisher.Publish("panic.handler."+path, body)
-				}
-			}()
-		}
-
-		handler.Handle(responder, request)
+		handler.ServePlatform(responder, request)
 
 		return nil
 	}))
 }
 
+func (s *Service) AddHealthChecker(healthChecker HealthChecker) {
+	s.healthCheckers = append(s.healthCheckers, healthChecker)
+}
+
 func (s *Service) AddListener(topic string, handler ConsumerHandler) {
 	logger.Infoln("[Service.AddListener] Adding listener", topic)
+
 	s.subscriber.Subscribe(topic, ConsumerHandlerFunc(func(body []byte) error {
 		s.incrementWorkerPendingJobs()
 		defer s.decrementWorkerPendingJobs()
 
-		if PREVENT_PLATFORM_PANICS {
-			defer func() {
-				if r := recover(); r != nil {
-					s.publisher.Publish("panic.listener."+topic, body)
-				}
-			}()
-		}
+		defer capturePanic(func(r interface{}) {
+			s.publisher.Publish("panic.listener."+topic, body)
+		})
 
 		logger.Infof("[Service.AddListener] Handling %s publish", topic)
 
@@ -194,6 +207,35 @@ func (s *Service) Run() {
 	sigc := make(chan os.Signal, 1)
 	signal.Notify(sigc, syscall.SIGHUP, syscall.SIGINT, syscall.SIGTERM, syscall.SIGQUIT, syscall.SIGKILL)
 
+	go func() {
+		for {
+			select {
+			case err := <-s.checkHealth():
+				if err != nil {
+					logger.WithError(err).Error("Service has failed a health check")
+
+					s.healthManager.SetHealthStatus(HealthStatus{
+						IsHealthy:   false,
+						Description: err.Error(),
+					})
+				} else {
+					s.healthManager.SetHealthStatus(HealthStatus{
+						IsHealthy: true,
+					})
+				}
+			case <-time.After(10 * time.Second):
+				logger.Error("Service health check has timed out")
+
+				s.healthManager.SetHealthStatus(HealthStatus{
+					IsHealthy:   false,
+					Description: "Health check exceeded time limit of 10 seconds",
+				})
+			}
+
+			time.Sleep(30 * time.Second)
+		}
+	}()
+
 	// Close the service if we detect a kill signal
 	go func() {
 		select {
@@ -202,18 +244,46 @@ func (s *Service) Run() {
 		}
 	}()
 
+	go s.healthManager.Run()
+
 	s.subscriber.Run()
 
 	<-s.allWorkersDone
 }
 
+func (s *Service) checkHealth() <-chan error {
+	errChan := make(chan error)
+
+	go func() {
+		var healthErr error
+
+		for i := range s.healthCheckers {
+			if err := s.healthCheckers[i].CheckHealth(); err != nil {
+				healthErr = err
+				break
+			}
+		}
+
+		errChan <- healthErr
+		close(errChan)
+	}()
+
+	return errChan
+}
+
 func NewService(serviceName string, publisher Publisher, subscriber Subscriber, tracer Tracer) (*Service, error) {
 	return &Service{
-		tracer:         tracer,
-		subscriber:     subscriber,
-		publisher:      publisher,
-		responder:      NewPublishResponder(publisher),
-		name:           serviceName,
+		name:       serviceName,
+		tracer:     tracer,
+		subscriber: subscriber,
+		publisher:  publisher,
+		responder:  NewPublishResponder(publisher),
+
+		healthManager: NewFileHealthManager("/tmp/healthy"),
+		healthCheckers: []HealthChecker{
+			newPlatformHealthChecker(publisher),
+		},
+
 		workerQuitChan: make(chan interface{}),
 		allWorkersDone: make(chan interface{}),
 	}, nil
@@ -221,11 +291,17 @@ func NewService(serviceName string, publisher Publisher, subscriber Subscriber, 
 
 func NewServiceWithResponder(serviceName string, publisher Publisher, subscriber Subscriber, tracer Tracer, responder Responder) (*Service, error) {
 	return &Service{
-		tracer:         tracer,
-		subscriber:     subscriber,
-		publisher:      publisher,
-		responder:      responder,
-		name:           serviceName,
+		name:       serviceName,
+		tracer:     tracer,
+		subscriber: subscriber,
+		publisher:  publisher,
+		responder:  responder,
+
+		healthManager: NewFileHealthManager("/tmp/healthy"),
+		healthCheckers: []HealthChecker{
+			newPlatformHealthChecker(publisher),
+		},
+
 		workerQuitChan: make(chan interface{}),
 		allWorkersDone: make(chan interface{}),
 	}, nil
