@@ -3,6 +3,7 @@ package platform
 import (
 	"errors"
 	"fmt"
+	"github.com/Sirupsen/logrus"
 	"os"
 	"os/signal"
 	"runtime"
@@ -112,6 +113,12 @@ func (s *Service) AddHandler(path string, handler Handler) {
 		responder := s.generateResponder(request, path)
 
 		defer capturePanic(func(r interface{}) {
+			logger.WithFields(logrus.Fields{
+				"resource_type": "handler",
+				"path":          path,
+				"reason":        r,
+			}).Error("Service has panicked!")
+
 			panicErrorBytes, _ := Marshal(&Error{
 				Message: String(fmt.Sprintf("A fatal error has occurred. %s: %s %s", path, identifyPanic(), r)),
 			})
@@ -143,6 +150,12 @@ func (s *Service) AddListener(topic string, handler ConsumerHandler) {
 		defer s.decrementWorkerPendingJobs()
 
 		defer capturePanic(func(r interface{}) {
+			logger.WithFields(logrus.Fields{
+				"resource_type": "listener",
+				"topic":         topic,
+				"reason":        r,
+			}).Error("Service has panicked!")
+
 			s.publisher.Publish("panic.listener."+topic, body)
 		})
 
