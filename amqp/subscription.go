@@ -3,10 +3,12 @@ package amqp
 import (
 	"sync"
 
+	"strconv"
+
 	"github.com/microplatform-io/platform"
 )
 
-const MAX_WORKERS = 50
+var MAX_WORKERS = platform.Getenv("MAX_WORKERS", "50")
 
 type subscription struct {
 	topic        string
@@ -60,8 +62,13 @@ func newSubscription(topic string, handler platform.ConsumerHandler) *subscripti
 		totalWorkers: 0,
 	}
 
+	maxWorkers, err := strconv.Atoi(MAX_WORKERS)
+	if err != nil {
+		maxWorkers = 50
+	}
+
 	// TODO: Determine an ideal worker pool
-	for i := 0; i < MAX_WORKERS; i++ {
+	for i := 0; i < maxWorkers; i++ {
 		go s.runWorker()
 	}
 
