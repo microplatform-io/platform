@@ -13,8 +13,8 @@ import (
 	"sync"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/pborman/uuid"
+	"github.com/sirupsen/logrus"
 )
 
 var (

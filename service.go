@@ -3,7 +3,6 @@ package platform
 import (
 	"errors"
 	"fmt"
-	"github.com/Sirupsen/logrus"
 	"os"
 	"os/signal"
 	"runtime"
@@ -12,6 +11,8 @@ import (
 	"sync/atomic"
 	"syscall"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type Handler interface {

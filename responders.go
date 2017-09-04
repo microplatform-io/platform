@@ -1,11 +1,11 @@
 package platform
 
 import (
-	"github.com/Sirupsen/logrus"
 	"sync"
 	"time"
 
 	"github.com/pkg/errors"
+	"github.com/sirupsen/logrus"
 )
 
 type Responder interface {

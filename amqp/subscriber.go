@@ -4,8 +4,8 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Sirupsen/logrus"
 	"github.com/microplatform-io/platform"
+	"github.com/sirupsen/logrus"
 	"github.com/streadway/amqp"
 )
 
