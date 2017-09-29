@@ -45,13 +45,6 @@ func (p *Publisher) resetChannel() error {
 	return nil
 }
 
-func (p *Publisher) Close() error {
-	if p.channelInterface != nil {
-		return p.channelInterface.Close()
-	}
-	return nil
-}
-
 func (p *Publisher) Publish(topic string, body []byte) error {
 	var publishErr error
 
