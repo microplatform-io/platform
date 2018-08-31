@@ -12,6 +12,8 @@ import (
 	"syscall"
 	"time"
 
+	"runtime/debug"
+
 	"github.com/sirupsen/logrus"
 )
 
@@ -118,7 +120,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 				"resource_type": "handler",
 				"path":          path,
 				"reason":        r,
-				"panic":         identifyPanic(),
+				"stack-trace":   string(debug.Stack()),
 			}).Error("Service has panicked!")
 
 			panicErrorBytes, _ := Marshal(&Error{
