@@ -118,6 +118,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 				"resource_type": "handler",
 				"path":          path,
 				"reason":        r,
+				"panic":         identifyPanic(),
 			}).Error("Service has panicked!")
 
 			panicErrorBytes, _ := Marshal(&Error{
