@@ -6,6 +6,7 @@ import (
 	"os"
 	"os/signal"
 	"runtime"
+	"runtime/debug"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -118,6 +119,7 @@ func (s *Service) AddHandler(path string, handler Handler) {
 				"resource_type": "handler",
 				"path":          path,
 				"reason":        r,
+				"stacktrace":    string(debug.Stack()),
 			}).Error("Service has panicked!")
 
 			panicErrorBytes, _ := Marshal(&Error{
@@ -155,6 +157,7 @@ func (s *Service) AddListener(topic string, handler ConsumerHandler) {
 				"resource_type": "listener",
 				"topic":         topic,
 				"reason":        r,
+				"stacktrace":    string(debug.Stack()),
 			}).Error("Service has panicked!")
 
 			s.publisher.Publish("panic.listener."+topic, body)
